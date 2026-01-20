@@ -3,12 +3,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Shogo | 業務アプリ開発エンジニア ポートフォリオ</title>
-    <!-- Tailwind CSS (スタイリング用フレームワーク) -->
+    <title>Shogo | Portfolio</title>
+    <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- Google Fonts (Noto Sans JP) -->
-    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
-    <!-- Font Awesome (アイコン用) -->
+    <!-- Google Fonts (Inter & Noto Sans JP) -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Noto+Sans+JP:wght@400;500;700;900&display=swap" rel="stylesheet">
+    <!-- Font Awesome -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     
     <script>
@@ -16,339 +16,150 @@
             theme: {
                 extend: {
                     fontFamily: {
-                        sans: ['"Noto Sans JP"', 'sans-serif'],
+                        sans: ['"Inter"', '"Noto Sans JP"', 'sans-serif'],
                     },
                     colors: {
-                        primary: '#2563EB', // メインカラー（信頼感のある青）
-                        secondary: '#1E40AF',
-                        accent: '#F59E0B',
+                        // Apple-like colors with Purple Accent
+                        'apple-bg': '#F5F5F7', // 背景の薄いグレー
+                        'apple-text': '#1D1D1F', // メインテキストの黒
+                        'apple-gray': '#86868B', // サブテキストのグレー
+                        'apple-purple': '#8a2be2', // ★ここを変更：BlueViolet
+                        'apple-purple-dark': '#731bc2', // ホバー用の濃い紫
+                        'apple-dark': '#161617', // ダークセクション背景
+                    },
+                    boxShadow: {
+                        'soft': '0 4px 20px rgba(0, 0, 0, 0.04)',
+                        'card': '0 10px 30px -10px rgba(0, 0, 0, 0.05)',
                     }
                 }
             }
         }
     </script>
     <style>
-        /* スムーズスクロール */
-        html {
-            scroll-behavior: smooth;
-        }
-        /* アニメーションの微調整 */
-        .fade-in-up {
-            animation: fadeInUp 0.8s ease-out forwards;
+        html { scroll-behavior: smooth; }
+        body { font-feature-settings: "palt"; }
+        
+        /* アニメーション定義 */
+        .fade-in {
+            animation: fadeIn 1.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
             opacity: 0;
-            transform: translateY(20px);
+            transform: translateY(30px);
         }
-        @keyframes fadeInUp {
+        
+        @keyframes fadeIn {
             to {
                 opacity: 1;
                 transform: translateY(0);
             }
         }
+
+        /* Apple風のグリッドカードのホバーエフェクト */
+        .hover-scale {
+            transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+        .hover-scale:hover {
+            transform: scale(1.02);
+        }
     </style>
 </head>
-<body class="bg-slate-50 text-slate-800 font-sans antialiased">
+<body class="bg-apple-bg text-apple-text font-sans antialiased selection:bg-apple-purple selection:text-white">
 
     <!-- ナビゲーション -->
-    <nav class="bg-white/90 backdrop-blur-md shadow-sm fixed w-full z-50 transition-all duration-300">
-        <div class="container mx-auto px-6 py-4 flex justify-between items-center">
-            <a href="#" class="text-xl font-bold text-slate-800 tracking-tight">Shogo<span class="text-primary">.Dev</span></a>
-            <div class="hidden md:flex space-x-8 text-sm font-medium text-slate-600">
-                <a href="#services" class="hover:text-primary transition">できること</a>
-                <a href="#works" class="hover:text-primary transition">実績・事例</a>
-                <a href="#skills" class="hover:text-primary transition">スキル</a>
-                <a href="#process" class="hover:text-primary transition">進め方</a>
-                <a href="#contact" class="px-5 py-2 bg-primary text-white rounded-full hover:bg-secondary transition shadow-md hover:shadow-lg">お問い合わせ</a>
+    <nav class="fixed top-0 w-full z-50 bg-white/80 backdrop-blur-md border-b border-gray-200/50">
+        <div class="max-w-[980px] mx-auto px-6 h-12 flex justify-between items-center text-xs font-medium tracking-wide">
+            <a href="#" class="text-lg font-semibold tracking-tighter hover:opacity-70 transition">Shogo.</a>
+            
+            <div class="hidden md:flex space-x-8 text-black/80">
+                <a href="#services" class="hover:text-apple-purple transition">Services</a>
+                <a href="#works" class="hover:text-apple-purple transition">Works</a>
+                <a href="#skills" class="hover:text-apple-purple transition">Skills</a>
+                <a href="#process" class="hover:text-apple-purple transition">Process</a>
             </div>
-            <!-- モバイル用メニューアイコン（簡易版） -->
-            <button class="md:hidden text-slate-600 focus:outline-none" onclick="document.getElementById('mobile-menu').classList.toggle('hidden')">
-                <i class="fas fa-bars text-2xl"></i>
-            </button>
-        </div>
-        <!-- モバイルメニュー -->
-        <div id="mobile-menu" class="hidden md:hidden bg-white border-t border-slate-100">
-            <a href="#services" class="block px-6 py-3 text-slate-600 hover:bg-slate-50">できること</a>
-            <a href="#works" class="block px-6 py-3 text-slate-600 hover:bg-slate-50">実績・事例</a>
-            <a href="#skills" class="block px-6 py-3 text-slate-600 hover:bg-slate-50">スキル</a>
-            <a href="#process" class="block px-6 py-3 text-slate-600 hover:bg-slate-50">進め方</a>
-            <a href="#contact" class="block px-6 py-3 text-primary font-bold hover:bg-slate-50">お問い合わせ</a>
+            
+            <a href="#contact" class="bg-black text-white px-3 py-1 rounded-full text-xs hover:bg-gray-800 transition">Contact</a>
         </div>
     </nav>
 
-    <!-- 1) トップ（最重要：30秒で読める） -->
-    <header class="pt-32 pb-20 md:pt-48 md:pb-32 px-6 bg-gradient-to-b from-white to-slate-50">
-        <div class="container mx-auto max-w-4xl text-center fade-in-up" style="animation-delay: 0.1s;">
-            <div class="inline-block px-3 py-1 mb-4 text-sm font-semibold text-primary bg-blue-50 rounded-full border border-blue-100">
-                業務アプリ開発エンジニア
-            </div>
-            <h1 class="text-4xl md:text-6xl font-bold text-slate-900 mb-6 leading-tight">
-                Shogo / 翔吾
+    <!-- 1) トップ：ヒーローセクション -->
+    <header class="pt-40 pb-32 px-6 bg-white text-center overflow-hidden relative">
+        <div class="max-w-[980px] mx-auto fade-in">
+            <p class="text-apple-purple font-semibold mb-4 text-sm md:text-base tracking-wide uppercase">Portfolio</p>
+            <h1 class="text-5xl md:text-7xl font-extrabold tracking-tight text-apple-text mb-6 leading-[1.1]">
+                自動化で、<br>
+                時間はもっとつくれる。
             </h1>
-            <h2 class="text-xl md:text-2xl text-slate-600 font-medium mb-8">
-                自動化・内製ツール構築が得意なエンジニア
-            </h2>
-            <p class="text-base md:text-lg text-slate-500 max-w-2xl mx-auto leading-relaxed mb-10">
-                要件整理〜設計〜実装〜運用まで一貫して対応。<br class="hidden md:block">
-                GASやWebアプリを活用した<span class="text-slate-800 font-bold bg-yellow-100 px-1">業務自動化</span>、API連携、データ整備により、<br class="hidden md:block">
-                あなたのビジネスの「面倒な手作業」をゼロにします。
+            <p class="text-xl md:text-2xl font-medium text-apple-gray max-w-2xl mx-auto leading-relaxed mb-10">
+                Shogo / 業務アプリ開発エンジニア<br>
+                <span class="text-base font-normal mt-2 block">要件整理から実装まで。GASやWebアプリで、<br class="hidden md:inline">あなたのビジネスを「手作業」から解放します。</span>
             </p>
-            <div class="flex flex-col sm:flex-row justify-center gap-4">
-                <a href="#works" class="px-8 py-3 bg-white text-slate-700 border border-slate-300 rounded-lg hover:bg-slate-50 transition font-medium shadow-sm">
+            
+            <div class="flex flex-col sm:flex-row justify-center gap-4 text-sm md:text-base">
+                <a href="#works" class="px-6 py-3 bg-apple-purple text-white rounded-full hover:bg-apple-purple-dark transition font-medium">
                     実績を見る
                 </a>
-                <a href="#contact" class="px-8 py-3 bg-primary text-white rounded-lg hover:bg-secondary transition font-medium shadow-lg hover:shadow-xl hover:-translate-y-0.5 transform">
-                    相談してみる
+                <a href="#contact" class="px-6 py-3 text-apple-purple hover:underline transition font-medium flex items-center justify-center">
+                    お問い合わせ <i class="fas fa-chevron-right text-xs ml-1"></i>
                 </a>
             </div>
         </div>
     </header>
 
-    <!-- 2) 提供できること（＝売り物） -->
-    <section id="services" class="py-20 bg-white">
-        <div class="container mx-auto px-6 max-w-6xl">
-            <h2 class="text-3xl font-bold text-center text-slate-800 mb-4">Service</h2>
-            <p class="text-center text-slate-500 mb-12">私が提供できる価値</p>
+    <!-- 2) 提供できること：Bento Gridスタイル -->
+    <section id="services" class="py-24 bg-apple-bg">
+        <div class="max-w-[1080px] mx-auto px-6">
+            <h2 class="text-3xl md:text-5xl font-bold text-center mb-16 tracking-tight">
+                できること。<br>
+                <span class="text-apple-gray">それは、ビジネスの加速。</span>
+            </h2>
             
-            <div class="grid md:grid-cols-2 lg:grid-cols-4 gap-8">
-                <!-- Service 1 -->
-                <div class="p-6 bg-slate-50 rounded-xl border border-slate-100 hover:shadow-md transition">
-                    <div class="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center text-primary mb-4">
-                        <i class="fas fa-robot text-xl"></i>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <!-- Large Card -->
+                <div class="md:col-span-2 bg-white rounded-[30px] p-10 shadow-soft hover-scale flex flex-col justify-between min-h-[360px] relative overflow-hidden group">
+                    <div class="relative z-10">
+                        <span class="text-xs font-bold text-apple-gray uppercase tracking-wider mb-2 block">Automation</span>
+                        <h3 class="text-3xl font-bold mb-4">業務自動化</h3>
+                        <p class="text-apple-gray font-medium leading-relaxed max-w-md">
+                            GAS / API / スクレイピングを駆使し、手動入力や通知作業を自動化。
+                            人間がやるべきでない作業をシステムに任せ、創造的な時間を生み出します。
+                        </p>
                     </div>
-                    <h3 class="text-lg font-bold mb-2">業務自動化</h3>
-                    <p class="text-sm text-slate-600 leading-relaxed">
-                        GAS / API / スクレイピングを活用し、手作業での転記や通知作業を自動化します。
-                    </p>
-                </div>
-                <!-- Service 2 -->
-                <div class="p-6 bg-slate-50 rounded-xl border border-slate-100 hover:shadow-md transition">
-                    <div class="w-12 h-12 bg-indigo-100 rounded-lg flex items-center justify-center text-indigo-600 mb-4">
-                        <i class="fas fa-code text-xl"></i>
-                    </div>
-                    <h3 class="text-lg font-bold mb-2">Webアプリ開発</h3>
-                    <p class="text-sm text-slate-600 leading-relaxed">
-                        HTML/CSS/JS + GAS や Next.js を用い、業務に特化した使いやすいツールを開発します。
-                    </p>
-                </div>
-                <!-- Service 3 -->
-                <div class="p-6 bg-slate-50 rounded-xl border border-slate-100 hover:shadow-md transition">
-                    <div class="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center text-green-600 mb-4">
-                        <i class="fas fa-wrench text-xl"></i>
-                    </div>
-                    <h3 class="text-lg font-bold mb-2">既存ツール改善</h3>
-                    <p class="text-sm text-slate-600 leading-relaxed">
-                        スプレッドシートの高速化、Notion構築、Zaim連携など、既存環境の最適化を行います。
-                    </p>
-                </div>
-                <!-- Service 4 -->
-                <div class="p-6 bg-slate-50 rounded-xl border border-slate-100 hover:shadow-md transition">
-                    <div class="w-12 h-12 bg-orange-100 rounded-lg flex items-center justify-center text-orange-600 mb-4">
-                        <i class="fas fa-chart-line text-xl"></i>
-                    </div>
-                    <h3 class="text-lg font-bold mb-2">データ整備・可視化</h3>
-                    <p class="text-sm text-slate-600 leading-relaxed">
-                        散らばったデータを整形し、Looker Studioなどでダッシュボード化。意思決定を支援します。
-                    </p>
-                </div>
-            </div>
-        </div>
-    </section>
-
-    <!-- 3) 実績・事例（ここが一番大事） -->
-    <section id="works" class="py-20 bg-slate-50">
-        <div class="container mx-auto px-6 max-w-5xl">
-            <h2 class="text-3xl font-bold text-center text-slate-800 mb-4">Works</h2>
-            <p class="text-center text-slate-500 mb-12">これまでの解決事例</p>
-
-            <div class="space-y-8">
-                
-                <!-- Work 1: Zaim連携 (ご提示いただいた例) -->
-                <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden md:flex">
-                    <div class="p-8 w-full">
-                        <div class="flex flex-wrap items-center justify-between mb-4 gap-2">
-                            <h3 class="text-xl font-bold text-slate-800">楽天ペイ → Zaim 自動連携ツール</h3>
-                            <span class="px-3 py-1 bg-green-100 text-green-700 text-xs font-bold rounded-full">自動化</span>
-                        </div>
-                        
-                        <div class="grid md:grid-cols-2 gap-6 mb-6">
-                            <!-- 課題 -->
-                            <div class="bg-red-50 p-4 rounded-lg border border-red-100">
-                                <h4 class="text-sm font-bold text-red-700 mb-2 flex items-center">
-                                    <i class="fas fa-exclamation-circle mr-2"></i>課題
-                                </h4>
-                                <p class="text-sm text-slate-700">手動入力が煩雑で、家計簿入力に毎週30分以上の時間が取られていた。</p>
-                            </div>
-                            <!-- 成果 -->
-                            <div class="bg-blue-50 p-4 rounded-lg border border-blue-100">
-                                <h4 class="text-sm font-bold text-blue-700 mb-2 flex items-center">
-                                    <i class="fas fa-check-circle mr-2"></i>成果
-                                </h4>
-                                <p class="text-sm text-slate-700">入力時間を<span class="font-bold underline decoration-blue-300 decoration-2">ほぼゼロに削減</span>。入力漏れも解消。</p>
-                            </div>
-                        </div>
-
-                        <div class="space-y-3">
-                            <div>
-                                <h4 class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">対応内容</h4>
-                                <p class="text-sm text-slate-700">
-                                    GASによるメール解析・自動取得を行い、Zaim APIへ連携。iPhoneショートカットからも安定動作するように通信方式を独自に改善。
-                                </p>
-                            </div>
-                            <div>
-                                <h4 class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">使用技術</h4>
-                                <div class="flex flex-wrap gap-2">
-                                    <span class="px-2 py-1 bg-slate-100 text-slate-600 text-xs rounded border border-slate-200">Google Apps Script</span>
-                                    <span class="px-2 py-1 bg-slate-100 text-slate-600 text-xs rounded border border-slate-200">Fetch API</span>
-                                    <span class="px-2 py-1 bg-slate-100 text-slate-600 text-xs rounded border border-slate-200">Zaim API</span>
-                                </div>
-                            </div>
-                            <div class="pt-2">
-                                <a href="#" class="text-primary text-sm font-medium hover:underline flex items-center">
-                                    <i class="fab fa-github mr-2"></i>GitHubでコードを見る
-                                </a>
-                            </div>
-                        </div>
+                    <div class="absolute right-[-20px] bottom-[-20px] opacity-10 group-hover:opacity-20 transition duration-500">
+                        <i class="fas fa-robot text-[200px]"></i>
                     </div>
                 </div>
 
-                <!-- Work 2: ダミー事例 (勤怠管理) -->
-                <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden md:flex">
-                    <div class="p-8 w-full">
-                        <div class="flex flex-wrap items-center justify-between mb-4 gap-2">
-                            <h3 class="text-xl font-bold text-slate-800">Slack打刻 → スプレッドシート勤怠管理</h3>
-                            <span class="px-3 py-1 bg-indigo-100 text-indigo-700 text-xs font-bold rounded-full">Webアプリ</span>
+                <!-- Tall Card -->
+                <div class="bg-white rounded-[30px] p-10 shadow-soft hover-scale flex flex-col justify-center text-center md:row-span-2 relative overflow-hidden group">
+                     <div class="relative z-10">
+                        <div class="w-16 h-16 bg-apple-bg rounded-full flex items-center justify-center mx-auto mb-6 text-apple-text">
+                            <i class="fas fa-code text-2xl"></i>
                         </div>
-                        
-                        <div class="grid md:grid-cols-2 gap-6 mb-6">
-                            <div class="bg-red-50 p-4 rounded-lg border border-red-100">
-                                <h4 class="text-sm font-bold text-red-700 mb-2 flex items-center"><i class="fas fa-exclamation-circle mr-2"></i>課題</h4>
-                                <p class="text-sm text-slate-700">月末にまとめて勤怠を入力しており、正確性が低く集計作業も負担だった。</p>
-                            </div>
-                            <div class="bg-blue-50 p-4 rounded-lg border border-blue-100">
-                                <h4 class="text-sm font-bold text-blue-700 mb-2 flex items-center"><i class="fas fa-check-circle mr-2"></i>成果</h4>
-                                <p class="text-sm text-slate-700">Slackスタンプでの打刻を実現し、集計コストを<span class="font-bold underline decoration-blue-300 decoration-2">月5時間削減</span>。</p>
-                            </div>
-                        </div>
-
-                        <div class="space-y-3">
-                            <div>
-                                <h4 class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">対応内容</h4>
-                                <p class="text-sm text-slate-700">
-                                    SlackのEvent APIを利用し、特定のスタンプが押された時刻をGAS経由でスプレッドシートに記録。月末にPDF形式の請求書を自動生成する機能も追加。
-                                </p>
-                            </div>
-                            <div>
-                                <h4 class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">使用技術</h4>
-                                <div class="flex flex-wrap gap-2">
-                                    <span class="px-2 py-1 bg-slate-100 text-slate-600 text-xs rounded border border-slate-200">GAS</span>
-                                    <span class="px-2 py-1 bg-slate-100 text-slate-600 text-xs rounded border border-slate-200">Slack API</span>
-                                    <span class="px-2 py-1 bg-slate-100 text-slate-600 text-xs rounded border border-slate-200">Spreadsheet</span>
-                                </div>
-                            </div>
-                        </div>
+                        <h3 class="text-2xl font-bold mb-4">Webアプリ開発</h3>
+                        <p class="text-apple-gray text-sm leading-relaxed">
+                            Next.js や GASを活用し、業務フローに最適化された専用ツールを開発。
+                            パッケージソフトでは届かない痒い所に手を届けます。
+                        </p>
                     </div>
                 </div>
 
-                <!-- Work 3: ダミー事例 (スクレイピング) -->
-                <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden md:flex">
-                    <div class="p-8 w-full">
-                        <div class="flex flex-wrap items-center justify-between mb-4 gap-2">
-                            <h3 class="text-xl font-bold text-slate-800">競合ECサイト価格調査ツール</h3>
-                            <span class="px-3 py-1 bg-orange-100 text-orange-700 text-xs font-bold rounded-full">スクレイピング</span>
-                        </div>
-                        
-                        <div class="grid md:grid-cols-2 gap-6 mb-6">
-                            <div class="bg-red-50 p-4 rounded-lg border border-red-100">
-                                <h4 class="text-sm font-bold text-red-700 mb-2 flex items-center"><i class="fas fa-exclamation-circle mr-2"></i>課題</h4>
-                                <p class="text-sm text-slate-700">毎日3サイトを手動で巡回し価格を確認していたが、見落としが発生していた。</p>
-                            </div>
-                            <div class="bg-blue-50 p-4 rounded-lg border border-blue-100">
-                                <h4 class="text-sm font-bold text-blue-700 mb-2 flex items-center"><i class="fas fa-check-circle mr-2"></i>成果</h4>
-                                <p class="text-sm text-slate-700">毎朝8時に一覧をチャット通知。価格変更時の<span class="font-bold underline decoration-blue-300 decoration-2">即時検知が可能に</span>。</p>
-                            </div>
-                        </div>
-
-                        <div class="space-y-3">
-                            <div>
-                                <h4 class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">対応内容</h4>
-                                <p class="text-sm text-slate-700">
-                                    Python (Selenium/BeautifulSoup) を定期実行し、対象サイトから価格情報を抽出。前回取得分との差分がある場合のみLINE Notifyで通知。
-                                </p>
-                            </div>
-                            <div>
-                                <h4 class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">使用技術</h4>
-                                <div class="flex flex-wrap gap-2">
-                                    <span class="px-2 py-1 bg-slate-100 text-slate-600 text-xs rounded border border-slate-200">Python</span>
-                                    <span class="px-2 py-1 bg-slate-100 text-slate-600 text-xs rounded border border-slate-200">Selenium</span>
-                                    <span class="px-2 py-1 bg-slate-100 text-slate-600 text-xs rounded border border-slate-200">LINE Notify API</span>
-                                </div>
-                            </div>
-                        </div>
+                <!-- Small Card 1 -->
+                <div class="bg-white rounded-[30px] p-8 shadow-soft hover-scale flex flex-col justify-between h-[280px]">
+                    <div>
+                        <i class="fas fa-wrench text-2xl text-apple-gray mb-4"></i>
+                        <h3 class="text-xl font-bold mb-2">既存ツール改善</h3>
+                        <p class="text-sm text-apple-gray leading-relaxed">
+                            重くなったスプレッドシートの高速化や、Notion・ZaimなどのAPI連携による機能拡張。
+                        </p>
                     </div>
                 </div>
 
-            </div>
-        </div>
-    </section>
-
-    <!-- 4) スキルセット（発注側が判断しやすい形に） -->
-    <section id="skills" class="py-20 bg-white">
-        <div class="container mx-auto px-6 max-w-4xl">
-            <h2 class="text-3xl font-bold text-center text-slate-800 mb-4">Skills</h2>
-            <p class="text-center text-slate-500 mb-12">使用可能な技術スタック</p>
-
-            <div class="grid md:grid-cols-2 gap-8">
-                <!-- 言語・フレームワーク -->
-                <div>
-                    <h3 class="text-lg font-bold mb-4 border-b pb-2 border-slate-100">言語・フレームワーク</h3>
-                    <ul class="space-y-4">
-                        <li class="flex items-center justify-between">
-                            <div class="flex items-center">
-                                <i class="fab fa-js text-yellow-400 w-8 text-xl"></i>
-                                <span class="font-medium">JavaScript / GAS</span>
-                            </div>
-                            <span class="text-xs font-bold bg-blue-100 text-blue-800 px-2 py-1 rounded">Expert</span>
-                        </li>
-                        <li class="flex items-center justify-between">
-                            <div class="flex items-center">
-                                <i class="fab fa-python text-blue-500 w-8 text-xl"></i>
-                                <span class="font-medium">Python</span>
-                            </div>
-                            <span class="text-xs font-bold bg-green-100 text-green-800 px-2 py-1 rounded">Advanced</span>
-                        </li>
-                        <li class="flex items-center justify-between">
-                            <div class="flex items-center">
-                                <i class="fab fa-java text-red-500 w-8 text-xl"></i>
-                                <span class="font-medium">Java / Spring Boot</span>
-                            </div>
-                            <span class="text-xs font-bold bg-slate-100 text-slate-600 px-2 py-1 rounded">Advanced</span>
-                        </li>
-                        <li class="flex items-center justify-between">
-                            <div class="flex items-center">
-                                <i class="fab fa-react text-cyan-400 w-8 text-xl"></i>
-                                <span class="font-medium">React / Next.js</span>
-                            </div>
-                            <span class="text-xs font-bold bg-slate-100 text-slate-600 px-2 py-1 rounded">Intermediate</span>
-                        </li>
-                    </ul>
-                </div>
-
-                <!-- ツール・その他 -->
-                <div>
-                    <h3 class="text-lg font-bold mb-4 border-b pb-2 border-slate-100">ツール・その他</h3>
-                    <div class="flex flex-wrap gap-2">
-                        <span class="px-3 py-2 bg-slate-50 border border-slate-200 rounded text-sm text-slate-700"><i class="fab fa-github mr-2"></i>Git / GitHub</span>
-                        <span class="px-3 py-2 bg-slate-50 border border-slate-200 rounded text-sm text-slate-700"><i class="fab fa-docker mr-2"></i>Docker</span>
-                        <span class="px-3 py-2 bg-slate-50 border border-slate-200 rounded text-sm text-slate-700"><i class="fas fa-database mr-2"></i>SQL</span>
-                        <span class="px-3 py-2 bg-slate-50 border border-slate-200 rounded text-sm text-slate-700">Notion</span>
-                        <span class="px-3 py-2 bg-slate-50 border border-slate-200 rounded text-sm text-slate-700">Slack API</span>
-                        <span class="px-3 py-2 bg-slate-50 border border-slate-200 rounded text-sm text-slate-700">OpenAI API</span>
-                        <span class="px-3 py-2 bg-slate-50 border border-slate-200 rounded text-sm text-slate-700">Firebase</span>
-                    </div>
-                    <div class="mt-6 p-4 bg-slate-50 rounded-lg text-sm text-slate-600 border border-slate-200">
-                        <p>
-                            <i class="fas fa-check text-green-500 mr-2"></i>
-                            <strong>得意領域：</strong><br>
-                            業務フローの整理から入る自動化提案が得意です。技術ありきではなく、運用コストと保守性を考慮した選定を行います。
+                <!-- Small Card 2 -->
+                <div class="bg-white rounded-[30px] p-8 shadow-soft hover-scale flex flex-col justify-between h-[280px] bg-gradient-to-br from-black to-gray-800 text-white">
+                    <div>
+                        <i class="fas fa-chart-pie text-2xl text-gray-400 mb-4"></i>
+                        <h3 class="text-xl font-bold mb-2 text-white">データ可視化</h3>
+                        <p class="text-sm text-gray-400 leading-relaxed">
+                            散らばったデータを整形し、Looker Studio等でダッシュボード化。経営判断の速度を上げます。
                         </p>
                     </div>
                 </div>
@@ -356,81 +167,171 @@
         </div>
     </section>
 
-    <!-- 5) 仕事の進め方（信頼づくり） -->
-    <section id="process" class="py-20 bg-slate-50">
-        <div class="container mx-auto px-6 max-w-4xl">
-            <h2 class="text-3xl font-bold text-center text-slate-800 mb-4">Process</h2>
-            <p class="text-center text-slate-500 mb-12">安心してお任せいただくために</p>
+    <!-- 3) 実績：フィーチャーセクション -->
+    <section id="works" class="py-24 bg-white">
+        <div class="max-w-[980px] mx-auto px-6">
+            <h2 class="text-3xl md:text-5xl font-bold mb-16 tracking-tight text-center">Works</h2>
 
-            <div class="relative border-l-2 border-slate-200 ml-4 md:ml-8 space-y-12">
-                <!-- Step 1 -->
-                <div class="relative pl-8 md:pl-12">
-                    <div class="absolute -left-[9px] top-0 w-4 h-4 rounded-full bg-primary border-4 border-white shadow-sm"></div>
-                    <h3 class="text-lg font-bold text-slate-800 mb-1">1. ヒアリング・要件整理</h3>
-                    <p class="text-sm text-slate-600">
-                        まずは現状の課題を詳しく伺います。専門用語は使わず、解決したいことを明確にします。ヒアリング後、要件整理メモを共有し認識齟齬を防ぎます。
+            <!-- Case 1 -->
+            <div class="mb-24 flex flex-col md:flex-row items-center gap-12 group">
+                <div class="w-full md:w-1/2">
+                    <div class="aspect-[4/3] bg-apple-bg rounded-[24px] flex items-center justify-center shadow-inner relative overflow-hidden">
+                        <i class="fas fa-mobile-alt text-6xl text-gray-300 group-hover:scale-110 transition duration-700"></i>
+                        <div class="absolute inset-0 bg-gradient-to-t from-black/5 to-transparent"></div>
+                    </div>
+                </div>
+                <div class="w-full md:w-1/2 md:pl-8">
+                    <span class="text-xs font-bold text-orange-500 uppercase tracking-wider mb-2 block">Case Study 01</span>
+                    <h3 class="text-3xl font-bold mb-4">楽天ペイ → Zaim 自動連携</h3>
+                    <p class="text-lg font-medium text-apple-text mb-6">
+                        入力時間を、ほぼゼロに。
+                    </p>
+                    <div class="space-y-4 text-apple-gray text-sm leading-relaxed mb-6">
+                        <p><strong class="text-apple-text">課題:</strong> 手動入力が煩雑で、家計簿管理に毎週30分以上を要していた。</p>
+                        <p><strong class="text-apple-text">解決策:</strong> GASでメール解析・自動取得しZaim APIへ連携。iPhoneショートカット対応。</p>
+                    </div>
+                    <a href="#" class="text-apple-purple text-sm font-medium hover:underline flex items-center">
+                        詳細とコードを見る <i class="fas fa-chevron-right text-xs ml-1"></i>
+                    </a>
+                </div>
+            </div>
+
+            <!-- Case 2 -->
+            <div class="mb-24 flex flex-col md:flex-row-reverse items-center gap-12 group">
+                <div class="w-full md:w-1/2">
+                    <div class="aspect-[4/3] bg-apple-dark rounded-[24px] flex items-center justify-center shadow-card relative overflow-hidden">
+                        <i class="fab fa-slack text-6xl text-gray-700 group-hover:text-white transition duration-500"></i>
+                    </div>
+                </div>
+                <div class="w-full md:w-1/2 md:pr-8">
+                    <span class="text-xs font-bold text-indigo-500 uppercase tracking-wider mb-2 block">Case Study 02</span>
+                    <h3 class="text-3xl font-bold mb-4">Slack打刻勤怠システム</h3>
+                    <p class="text-lg font-medium text-apple-text mb-6">
+                        スタンプ一つで、勤怠完了。
+                    </p>
+                    <div class="space-y-4 text-apple-gray text-sm leading-relaxed mb-6">
+                        <p><strong class="text-apple-text">課題:</strong> 月末のまとめて入力による不正確さと集計負担。</p>
+                        <p><strong class="text-apple-text">解決策:</strong> Slack Event API × GAS。スタンプ日時をスプレッドシートへ自動記録。</p>
+                    </div>
+                    <a href="#" class="text-apple-purple text-sm font-medium hover:underline flex items-center">
+                        詳細とコードを見る <i class="fas fa-chevron-right text-xs ml-1"></i>
+                    </a>
+                </div>
+            </div>
+            
+            <div class="text-center">
+                 <a href="#" class="inline-block px-6 py-2 border border-gray-300 rounded-full text-sm font-medium hover:bg-gray-50 transition">
+                    すべての実績を見る
+                </a>
+            </div>
+        </div>
+    </section>
+
+    <!-- 4) Skills -->
+    <section id="skills" class="py-24 bg-apple-bg">
+        <div class="max-w-[800px] mx-auto px-6">
+            <h2 class="text-3xl font-bold text-center mb-16 tracking-tight">Technologies</h2>
+            
+            <div class="bg-white rounded-[24px] p-8 md:p-12 shadow-sm">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-12">
+                    <div>
+                        <h3 class="text-sm font-bold text-apple-gray uppercase tracking-wider mb-6 border-b border-gray-100 pb-2">Languages & Frameworks</h3>
+                        <ul class="space-y-4">
+                            <li class="flex items-center justify-between group">
+                                <span class="font-semibold text-lg">JavaScript / GAS</span>
+                                <span class="text-xs text-apple-purple bg-purple-50 px-2 py-1 rounded-md opacity-0 group-hover:opacity-100 transition">Expert</span>
+                            </li>
+                            <li class="flex items-center justify-between group">
+                                <span class="font-semibold text-lg">Python</span>
+                                <span class="text-xs text-green-600 bg-green-50 px-2 py-1 rounded-md opacity-0 group-hover:opacity-100 transition">Advanced</span>
+                            </li>
+                            <li class="flex items-center justify-between">
+                                <span class="font-semibold text-lg text-apple-gray">Java / Spring Boot</span>
+                            </li>
+                            <li class="flex items-center justify-between">
+                                <span class="font-semibold text-lg text-apple-gray">React / Next.js</span>
+                            </li>
+                        </ul>
+                    </div>
+                    <div>
+                        <h3 class="text-sm font-bold text-apple-gray uppercase tracking-wider mb-6 border-b border-gray-100 pb-2">Tools & Environment</h3>
+                        <div class="flex flex-wrap gap-3">
+                            <span class="px-4 py-2 bg-apple-bg rounded-full text-sm font-medium text-apple-text">Git / GitHub</span>
+                            <span class="px-4 py-2 bg-apple-bg rounded-full text-sm font-medium text-apple-text">Docker</span>
+                            <span class="px-4 py-2 bg-apple-bg rounded-full text-sm font-medium text-apple-text">Notion</span>
+                            <span class="px-4 py-2 bg-apple-bg rounded-full text-sm font-medium text-apple-text">Slack API</span>
+                            <span class="px-4 py-2 bg-apple-bg rounded-full text-sm font-medium text-apple-text">Firebase</span>
+                            <span class="px-4 py-2 bg-apple-bg rounded-full text-sm font-medium text-apple-text">OpenAI API</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- 5) Process -->
+    <section id="process" class="py-24 bg-apple-dark text-white">
+        <div class="max-w-[980px] mx-auto px-6">
+            <h2 class="text-3xl md:text-5xl font-bold text-center mb-6 tracking-tight">Process</h2>
+            <p class="text-center text-gray-400 mb-16 max-w-xl mx-auto">信頼できるパートナーとして。<br>透明性の高いプロセスで進めます。</p>
+
+            <div class="grid md:grid-cols-4 gap-8 text-center md:text-left">
+                <div class="space-y-4">
+                    <div class="text-5xl font-bold text-gray-700">01</div>
+                    <h3 class="text-xl font-bold">ヒアリング</h3>
+                    <p class="text-sm text-gray-400 leading-relaxed">
+                        課題を詳しく伺います。専門用語は使いません。要件整理メモを作成し、認識を合わせます。
                     </p>
                 </div>
-                <!-- Step 2 -->
-                <div class="relative pl-8 md:pl-12">
-                    <div class="absolute -left-[9px] top-0 w-4 h-4 rounded-full bg-primary border-4 border-white shadow-sm"></div>
-                    <h3 class="text-lg font-bold text-slate-800 mb-1">2. 提案・仕様合意</h3>
-                    <p class="text-sm text-slate-600">
-                        実現可能な解決策と見積もりを提示します。簡易的な仕様書を作成し、完成イメージを合意した上で着手します。
+                <div class="space-y-4">
+                    <div class="text-5xl font-bold text-gray-700">02</div>
+                    <h3 class="text-xl font-bold">提案・合意</h3>
+                    <p class="text-sm text-gray-400 leading-relaxed">
+                        解決策と見積もりを提示。簡易仕様書で完成イメージを合意してから着手します。
                     </p>
                 </div>
-                <!-- Step 3 -->
-                <div class="relative pl-8 md:pl-12">
-                    <div class="absolute -left-[9px] top-0 w-4 h-4 rounded-full bg-primary border-4 border-white shadow-sm"></div>
-                    <h3 class="text-lg font-bold text-slate-800 mb-1">3. 実装・進捗共有</h3>
-                    <p class="text-sm text-slate-600">
-                        開発を行います。副業での稼働となりますが、週に1回は必ず進捗状況をご報告し、ブラックボックス化を防ぎます。
+                <div class="space-y-4">
+                    <div class="text-5xl font-bold text-gray-700">03</div>
+                    <h3 class="text-xl font-bold">実装</h3>
+                    <p class="text-sm text-gray-400 leading-relaxed">
+                        週1回の進捗共有を徹底。ブラックボックス化を防ぎ、安心して見守っていただけます。
                     </p>
                 </div>
-                <!-- Step 4 -->
-                <div class="relative pl-8 md:pl-12">
-                    <div class="absolute -left-[9px] top-0 w-4 h-4 rounded-full bg-primary border-4 border-white shadow-sm"></div>
-                    <h3 class="text-lg font-bold text-slate-800 mb-1">4. 納品・アフターフォロー</h3>
-                    <p class="text-sm text-slate-600">
-                        動作確認後、納品となります。納品後1週間以内の軽微な修正（不具合対応など）は無償で対応いたします。マニュアル作成も可能です。
+                <div class="space-y-4">
+                    <div class="text-5xl font-bold text-gray-700">04</div>
+                    <h3 class="text-xl font-bold">納品</h3>
+                    <p class="text-sm text-gray-400 leading-relaxed">
+                        動作確認後納品。納品後1週間の軽微な修正は無償対応。マニュアル作成も可能です。
                     </p>
                 </div>
             </div>
         </div>
     </section>
 
-    <!-- 6) 連絡先 -->
-    <footer id="contact" class="bg-slate-900 text-white py-16">
-        <div class="container mx-auto px-6 text-center max-w-2xl">
-            <h2 class="text-2xl font-bold mb-6">お問い合わせ</h2>
-            <p class="text-slate-400 mb-8">
+    <!-- 6) Contact -->
+    <footer id="contact" class="py-24 bg-apple-bg border-t border-gray-200">
+        <div class="max-w-[600px] mx-auto px-6 text-center">
+            <h2 class="text-3xl font-bold mb-6 tracking-tight">お問い合わせ</h2>
+            <p class="text-apple-gray mb-10">
                 自動化の相談や開発のご依頼など、お気軽にご連絡ください。<br>
                 通常24時間以内に返信いたします。
             </p>
             
-            <a href="mailto:your-email@example.com" class="inline-flex items-center justify-center px-8 py-4 bg-primary text-white font-bold rounded-lg hover:bg-secondary transition mb-12 w-full sm:w-auto shadow-lg shadow-blue-900/50">
-                <i class="far fa-envelope mr-3 text-xl"></i>
-                メールで連絡する
+            <a href="mailto:your-email@example.com" class="inline-flex items-center justify-center px-8 py-4 bg-apple-purple text-white font-medium rounded-full hover:bg-apple-purple-dark transition shadow-lg hover:shadow-xl hover:-translate-y-1 transform duration-300 mb-12">
+                メールで相談する
             </a>
 
-            <div class="flex justify-center space-x-8 mb-12">
-                <a href="#" class="text-slate-400 hover:text-white transition flex flex-col items-center">
-                    <i class="fab fa-github text-2xl mb-2"></i>
-                    <span class="text-xs">GitHub</span>
-                </a>
-                <a href="#" class="text-slate-400 hover:text-white transition flex flex-col items-center">
-                    <i class="fab fa-twitter text-2xl mb-2"></i>
-                    <span class="text-xs">X (Twitter)</span>
-                </a>
-                <a href="#" class="text-slate-400 hover:text-white transition flex flex-col items-center">
-                    <i class="fas fa-book text-2xl mb-2"></i>
-                    <span class="text-xs">Zenn / Qiita</span>
-                </a>
+            <div class="flex justify-center space-x-6 text-sm text-apple-gray">
+                <a href="#" class="hover:text-apple-text transition">GitHub</a>
+                <span class="text-gray-300">|</span>
+                <a href="#" class="hover:text-apple-text transition">Twitter</a>
+                <span class="text-gray-300">|</span>
+                <a href="#" class="hover:text-apple-text transition">Zenn</a>
             </div>
-
-            <div class="border-t border-slate-800 pt-8">
-                <p class="text-xs text-slate-500">&copy; 2026 Shogo. All Rights Reserved.</p>
-            </div>
+            
+            <p class="mt-12 text-xs text-gray-400">
+                &copy; 2026 Shogo. All rights reserved.
+            </p>
         </div>
     </footer>
 
