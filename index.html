@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Shogo | Portfolio</title>
+    <meta name="description" content="業務自動化・Webアプリ開発の実績と、日々使える個人開発ツールをまとめたポートフォリオ。">
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- Google Fonts (Inter & Noto Sans JP) -->
@@ -72,6 +73,7 @@
             <div class="hidden md:flex space-x-8 text-black/80">
                 <a href="#services" class="hover:text-apple-purple transition">Services</a>
                 <a href="#works" class="hover:text-apple-purple transition">Works</a>
+                <a href="#apps" class="hover:text-apple-purple transition">Apps</a>
                 <a href="#skills" class="hover:text-apple-purple transition">Skills</a>
                 <a href="#process" class="hover:text-apple-purple transition">Process</a>
             </div>
@@ -190,8 +192,8 @@
                         <p><strong class="text-apple-text">課題:</strong> 手動入力が煩雑で、家計簿管理に毎週30分以上を要していた。</p>
                         <p><strong class="text-apple-text">解決策:</strong> GASでメール解析・自動取得しZaim APIへ連携。iPhoneショートカット対応。</p>
                     </div>
-                    <a href="#" class="text-apple-purple text-sm font-medium hover:underline flex items-center">
-                        詳細とコードを見る <i class="fas fa-chevron-right text-xs ml-1"></i>
+                    <a href="https://github.com/kobasho-unihota/tatekae" class="text-apple-purple text-sm font-medium hover:underline flex items-center">
+                        関連する家計ツールを見る <i class="fas fa-chevron-right text-xs ml-1"></i>
                     </a>
                 </div>
             </div>
@@ -213,21 +215,90 @@
                         <p><strong class="text-apple-text">課題:</strong> 月末のまとめて入力による不正確さと集計負担。</p>
                         <p><strong class="text-apple-text">解決策:</strong> Slack Event API × GAS。スタンプ日時をスプレッドシートへ自動記録。</p>
                     </div>
-                    <a href="#" class="text-apple-purple text-sm font-medium hover:underline flex items-center">
-                        詳細とコードを見る <i class="fas fa-chevron-right text-xs ml-1"></i>
+                    <a href="https://github.com/kobasho-unihota" class="text-apple-purple text-sm font-medium hover:underline flex items-center">
+                        GitHubでコードを見る <i class="fas fa-chevron-right text-xs ml-1"></i>
                     </a>
                 </div>
             </div>
             
             <div class="text-center">
-                 <a href="#" class="inline-block px-6 py-2 border border-gray-300 rounded-full text-sm font-medium hover:bg-gray-50 transition">
-                    すべての実績を見る
-                </a>
+                 <a href="#apps" class="inline-block px-6 py-2 border border-gray-300 rounded-full text-sm font-medium hover:bg-gray-50 transition">
+                    個人開発アプリを見る
+                 </a>
             </div>
         </div>
     </section>
 
-    <!-- 4) Skills -->
+    <!-- 4) Apps -->
+    <section id="apps" class="py-24 bg-apple-bg">
+        <div class="max-w-[1080px] mx-auto px-6">
+            <div class="text-center mb-16">
+                <p class="text-apple-purple font-semibold text-sm uppercase tracking-wider mb-3">Personal Tools</p>
+                <h2 class="text-3xl md:text-5xl font-bold tracking-tight">日々の課題を、小さなアプリで解決。</h2>
+                <p class="text-apple-gray mt-5">これまで別々に管理していたツールを、このポートフォリオに統合しました。</p>
+            </div>
+
+            <div class="mb-12">
+                <h3 class="text-xl font-bold mb-5">家計・お金</h3>
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
+                    <a href="./apps/BestPrice/" class="bg-white rounded-[24px] p-6 shadow-soft hover-scale block">
+                        <i class="fas fa-scale-balanced text-2xl text-apple-purple mb-5"></i>
+                        <h4 class="font-bold text-lg mb-2">単価比較</h4>
+                        <p class="text-sm text-apple-gray">容量や個数が違う商品の実質単価を比較。</p>
+                    </a>
+                    <a href="./apps/pocket-contrib-calculator/" class="bg-white rounded-[24px] p-6 shadow-soft hover-scale block">
+                        <i class="fas fa-wallet text-2xl text-apple-purple mb-5"></i>
+                        <h4 class="font-bold text-lg mb-2">お小遣い計算</h4>
+                        <p class="text-sm text-apple-gray">夫婦の収入から家計負担とお小遣いを計算。</p>
+                    </a>
+                    <a href="./apps/tatekae/" class="bg-white rounded-[24px] p-6 shadow-soft hover-scale block">
+                        <i class="fas fa-receipt text-2xl text-apple-purple mb-5"></i>
+                        <h4 class="font-bold text-lg mb-2">立て替え入力</h4>
+                        <p class="text-sm text-apple-gray">立て替え記録を素早く登録する入力ツール。</p>
+                    </a>
+                    <a href="./apps/bonus-splitter/" class="bg-white rounded-[24px] p-6 shadow-soft hover-scale block">
+                        <i class="fas fa-coins text-2xl text-apple-purple mb-5"></i>
+                        <h4 class="font-bold text-lg mb-2">ボーナス分配</h4>
+                        <p class="text-sm text-apple-gray">家計貯金と個人枠をルールに沿って分配。</p>
+                    </a>
+                </div>
+            </div>
+
+            <div class="mb-12">
+                <h3 class="text-xl font-bold mb-5">健康・ライフログ</h3>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+                    <a href="./apps/BodyBank/" class="bg-white rounded-[24px] p-7 shadow-soft hover-scale block">
+                        <i class="fas fa-heart-pulse text-2xl text-apple-purple mb-5"></i>
+                        <h4 class="font-bold text-xl mb-2">Body Bank</h4>
+                        <p class="text-sm text-apple-gray">体内エネルギー収支と活動を記録・可視化。</p>
+                    </a>
+                    <a href="./apps/IUITracker/" class="bg-white rounded-[24px] p-7 shadow-soft hover-scale block">
+                        <i class="fas fa-calendar-check text-2xl text-apple-purple mb-5"></i>
+                        <h4 class="font-bold text-xl mb-2">Rhythm</h4>
+                        <p class="text-sm text-apple-gray">治療サイクルと日々の記録をまとめるトラッカー。</p>
+                    </a>
+                </div>
+            </div>
+
+            <div>
+                <h3 class="text-xl font-bold mb-5">生活支援</h3>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+                    <a href="./apps/fukan-weather/" class="bg-white rounded-[24px] p-7 shadow-soft hover-scale block">
+                        <i class="fas fa-cloud-sun text-2xl text-apple-purple mb-5"></i>
+                        <h4 class="font-bold text-xl mb-2">SoraGrid</h4>
+                        <p class="text-sm text-apple-gray">複数地点の天気を一覧で俯瞰するダッシュボード。</p>
+                    </a>
+                    <a href="./apps/poke-sapo/" class="bg-white rounded-[24px] p-7 shadow-soft hover-scale block">
+                        <i class="fas fa-wand-magic-sparkles text-2xl text-apple-purple mb-5"></i>
+                        <h4 class="font-bold text-xl mb-2">ポケさぽ</h4>
+                        <p class="text-sm text-apple-gray">画像と生成AIを使ったゲーム編成サポート。</p>
+                    </a>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- 5) Skills -->
     <section id="skills" class="py-24 bg-apple-bg">
         <div class="max-w-[800px] mx-auto px-6">
             <h2 class="text-3xl font-bold text-center mb-16 tracking-tight">Technologies</h2>
@@ -269,7 +340,7 @@
         </div>
     </section>
 
-    <!-- 5) Process -->
+    <!-- 6) Process -->
     <section id="process" class="py-24 bg-apple-dark text-white">
         <div class="max-w-[980px] mx-auto px-6">
             <h2 class="text-3xl md:text-5xl font-bold text-center mb-6 tracking-tight">Process</h2>
@@ -308,7 +379,7 @@
         </div>
     </section>
 
-    <!-- 6) Contact -->
+    <!-- 7) Contact -->
     <footer id="contact" class="py-24 bg-apple-bg border-t border-gray-200">
         <div class="max-w-[600px] mx-auto px-6 text-center">
             <h2 class="text-3xl font-bold mb-6 tracking-tight">お問い合わせ</h2>
@@ -317,16 +388,14 @@
                 通常24時間以内に返信いたします。
             </p>
             
-            <a href="mailto:your-email@example.com" class="inline-flex items-center justify-center px-8 py-4 bg-apple-purple text-white font-medium rounded-full hover:bg-apple-purple-dark transition shadow-lg hover:shadow-xl hover:-translate-y-1 transform duration-300 mb-12">
-                メールで相談する
+            <a href="https://github.com/kobasho-unihota" class="inline-flex items-center justify-center px-8 py-4 bg-apple-purple text-white font-medium rounded-full hover:bg-apple-purple-dark transition shadow-lg hover:shadow-xl hover:-translate-y-1 transform duration-300 mb-12">
+                GitHubを見る
             </a>
 
             <div class="flex justify-center space-x-6 text-sm text-apple-gray">
-                <a href="#" class="hover:text-apple-text transition">GitHub</a>
+                <a href="https://github.com/kobasho-unihota" class="hover:text-apple-text transition">GitHub</a>
                 <span class="text-gray-300">|</span>
-                <a href="#" class="hover:text-apple-text transition">Twitter</a>
-                <span class="text-gray-300">|</span>
-                <a href="#" class="hover:text-apple-text transition">Zenn</a>
+                <a href="#apps" class="hover:text-apple-text transition">Apps</a>
             </div>
             
             <p class="mt-12 text-xs text-gray-400">
@@ -337,4 +406,3 @@
 
 </body>
 </html>
-
