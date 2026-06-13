@@ -224,7 +224,8 @@ svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width:
   .topbar { gap: 6px; }
   .brand { min-width: 0; }
   .brand > span:last-child { min-width: 0; }
-  .brand strong, .brand small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .brand strong { overflow: visible; text-overflow: clip; white-space: nowrap; }
+  .brand small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .topbar { min-height: 66px; }
   .top-actions { gap: 6px; }
   .account-button { width: 76px; padding: 0 7px; justify-content: center; font-size: 9px; }
@@ -273,6 +274,11 @@ svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width:
 @media (max-width: 400px) {
   .brand { gap: 8px; }
   .brand small { display: none; }
+}
+
+@media (max-width: 360px) {
+  .brand { gap: 0; }
+  .brand > span:last-child { display: none; }
 }
 
 @media (prefers-reduced-motion: reduce) {
