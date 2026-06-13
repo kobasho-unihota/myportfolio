@@ -1,6 +1,6 @@
-import { bookingWarnings, effectiveBooking, gmailQuery, groupTrips, hotelRescanQuery, mergeBookings, parseTravelEmail } from "./core.mjs?v=4";
-import { fetchTravelMessages } from "./gmail.mjs?v=4";
-import { cloudSync } from "./firebase-sync.mjs?v=4";
+import { bookingWarnings, effectiveBooking, flightRescanQuery, gmailQuery, groupTrips, hotelRescanQuery, mergeBookings, parseTravelEmail } from "./core.mjs?v=5";
+import { fetchTravelMessages } from "./gmail.mjs?v=5";
+import { cloudSync } from "./firebase-sync.mjs?v=5";
 
 const state = {
   user: null,
@@ -42,7 +42,7 @@ document.querySelectorAll("[data-close]").forEach((button) => button.addEventLis
 
 elements.heroSyncButton.addEventListener("click", () => showView("sync"));
 elements.syncNowButton.addEventListener("click", syncGmail);
-elements.rescanHotelsButton.addEventListener("click", rescanHotels);
+elements.rescanAllButton.addEventListener("click", rescanAllBookings);
 elements.accountButton.addEventListener("click", handleAccount);
 elements.accountSettingsButton.addEventListener("click", handleAccount);
 elements.addBookingButton.addEventListener("click", () => openBookingDialog());
@@ -88,19 +88,23 @@ async function syncGmail() {
   }
 }
 
-async function rescanHotels() {
+async function rescanAllBookings() {
   try {
     setSyncing(true, true);
     const token = await cloudSync.authorizeGmail();
-    const messages = await fetchTravelMessages(token, hotelRescanQuery(), updateProgress);
-    const parsed = messages.map(parseTravelEmail).filter((booking) => booking?.type === "hotel");
-    const rebuilt = mergeBookings([], parsed);
-    updateProgress({ phase: "save", current: 0, total: rebuilt.length });
-    await cloudSync.replaceHotelBookings(rebuilt);
-    updateProgress({ phase: "save", current: rebuilt.length, total: rebuilt.length });
+    const hotelMessages = await fetchTravelMessages(token, hotelRescanQuery(), updateProgress);
+    const flightMessages = await fetchTravelMessages(token, flightRescanQuery(), updateProgress);
+    const hotels = mergeBookings([], hotelMessages.map(parseTravelEmail).filter((booking) => booking?.type === "hotel"));
+    const flights = mergeBookings([], flightMessages.map(parseTravelEmail).filter((booking) => booking?.type === "flight"));
+    updateProgress({ phase: "save", current: 0, total: hotels.length + flights.length });
+    await cloudSync.replaceHotelBookings(hotels);
+    updateProgress({ phase: "save", current: hotels.length, total: hotels.length + flights.length });
+    await cloudSync.replaceFlightBookings(flights);
+    updateProgress({ phase: "save", current: hotels.length + flights.length, total: hotels.length + flights.length });
     await cloudSync.saveSettings({ ...state.settings, lastSyncedAt: new Date().toISOString() });
-    const active = rebuilt.filter((booking) => booking.status !== "cancelled").length;
-    showToast(`ホテル${active}件を復元、取消${rebuilt.length - active}件を反映しました`);
+    const activeHotels = hotels.filter((booking) => booking.status !== "cancelled").length;
+    const activeFlights = flights.filter((booking) => booking.status !== "cancelled").length;
+    showToast(`航空券${activeFlights}件、ホテル${activeHotels}件を再構築しました`);
     showView("bookings");
   } catch (error) {
     showToast(error.status === 401 ? "認証期限が切れました。もう一度実行してください。" : readableError(error));
@@ -117,11 +121,11 @@ function updateProgress(progress) {
   elements.syncProgressText.textContent = progress.total ? `${progress.current} / ${progress.total}件` : `${progress.current}件見つかりました`;
 }
 
-function setSyncing(active, hotelRescan = false) {
+function setSyncing(active, fullRescan = false) {
   elements.syncNowButton.disabled = active;
-  elements.rescanHotelsButton.disabled = active;
+  elements.rescanAllButton.disabled = active;
   elements.syncNowButton.textContent = active ? "更新しています..." : "Gmailから更新する";
-  elements.rescanHotelsButton.textContent = active && hotelRescan ? "ホテルを再構築しています..." : "ホテルを完全再取得";
+  elements.rescanAllButton.textContent = active && fullRescan ? "全予約を再構築しています..." : "全予約を完全再取得";
   elements.syncProgress.hidden = !active;
   document.querySelector(".sync-orbit").classList.toggle("running", active);
 }

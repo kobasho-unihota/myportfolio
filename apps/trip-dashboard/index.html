@@ -10,10 +10,10 @@
   <meta name="apple-mobile-web-app-title" content="TripBoard">
   <meta name="format-detection" content="telephone=no">
   <title>TripBoard | 出張予約</title>
-  <link rel="manifest" href="./site.webmanifest?v=4">
+  <link rel="manifest" href="./site.webmanifest?v=5">
   <link rel="icon" href="./icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="./apple-touch-icon.png">
-  <link rel="stylesheet" href="./styles.css?v=4">
+  <link rel="stylesheet" href="./styles.css?v=5">
 </head>
 <body>
   <div class="app-shell">
@@ -69,8 +69,8 @@
         <h1>予約メールを更新</h1>
         <p>JAL国内線と楽天トラベルのメールを読み込みます。メール本文やアクセストークンは保存しません。</p>
         <button class="primary-button sync-main-button" id="syncNowButton" type="button">Gmailから更新する</button>
-        <button class="secondary-button sync-main-button" id="rescanHotelsButton" type="button">ホテルを完全再取得</button>
-        <p class="sync-note">削除したホテルが戻らない場合や、予約・取消を整理し直す場合に使用します。過去2年の楽天トラベルメールを予約番号ごとに再集計します。</p>
+        <button class="secondary-button sync-main-button" id="rescanAllButton" type="button">全予約を完全再取得</button>
+        <p class="sync-note">日付や便情報が正しくない場合に使用します。JALと楽天トラベルの予約・変更・取消メールを再集計します。</p>
         <div class="progress-card" id="syncProgress" hidden>
           <strong id="syncProgressTitle">メールを検索中</strong>
           <div><span id="syncProgressBar"></span></div>
@@ -142,6 +142,6 @@
   </dialog>
 
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
-  <script type="module" src="./app.mjs?v=4"></script>
+  <script type="module" src="./app.mjs?v=5"></script>
 </body>
 </html>

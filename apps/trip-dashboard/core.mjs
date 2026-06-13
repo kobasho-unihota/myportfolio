@@ -34,15 +34,28 @@ export function parseTravelEmail(message) {
 export function mergeBookings(existing, incoming) {
   const merged = new Map(existing.map((booking) => [booking.id, structuredCloneSafe(booking)]));
   [...incoming].sort((a, b) => sourceTime(a) - sourceTime(b)).forEach((booking) => {
-    const current = merged.get(booking.id);
+    let key = booking.id;
+    let current = merged.get(key);
+    if (!current && booking.type === "flight") {
+      const matching = [...merged.entries()].find(([, candidate]) =>
+        candidate.type === "flight" && flightSignature(candidate) === flightSignature(booking));
+      if (matching) {
+        [key, current] = matching;
+      }
+    }
     if (!current) {
       merged.set(booking.id, structuredCloneSafe(booking));
       return;
     }
     const latestSource = latestByTime([...(current.source || []), ...(booking.source || [])]);
     const incomingIsNewer = sourceTime(booking) >= sourceTime(current);
-    merged.set(booking.id, {
+    const targetId = current.parsed?.reservationNumber
+      ? current.id
+      : booking.parsed?.reservationNumber ? booking.id : key;
+    if (targetId !== key) merged.delete(key);
+    merged.set(targetId, {
       ...current,
+      id: targetId,
       provider: booking.provider || current.provider,
       status: current.status === "cancelled" || booking.status === "cancelled"
         ? "cancelled"
@@ -135,6 +148,10 @@ export function hotelRescanQuery() {
   return `newer_than:2y from:travel@mail.travel.rakuten.co.jp {subject:"予約完了メール" subject:"予約確認メール" subject:"キャンセル確認メール"} -in:trash -in:spam`;
 }
 
+export function flightRescanQuery() {
+  return `newer_than:1y {from:jal.com from:skyinfo.jal.com} subject:"JAL国内線" -in:trash -in:spam`;
+}
+
 function parseJal({ subject, body, source }) {
   const reservationNumber = match(body, /予約番号\s*[:：]?\s*([A-Z0-9]{6,})/i);
   const flightNumber = normalizeFlightNumber(
@@ -151,7 +168,7 @@ function parseJal({ subject, body, source }) {
   const changedTimes = [...body.matchAll(/\n(\d{1,2}:\d{2})\s*\n(?:\1\s*\n)?\n?([^\n]+)/g)];
   let origin = route ? cleanAirport(route[1]) : "";
   let destination = route ? cleanAirport(route[2]) : "";
-  let departureTime = normalTimes?.[1] || "";
+  let departureTime = match(body, /出発予定時刻\s*(\d{1,2}:\d{2})/) || normalTimes?.[1] || "";
   let arrivalTime = normalTimes?.[2] || "";
   if ((!origin || !destination) && changedTimes.length >= 2) {
     departureTime = changedTimes[0][1];
@@ -195,14 +212,15 @@ function parseRakuten({ subject, body, source }) {
   const reservationNumber = match(body, /予約(?:受付)?番号\s*[:：]?\s*([A-Z0-9]+)/i);
   if (!reservationNumber) return null;
   const cancelled = /キャンセル確認|予約をキャンセル/.test(subject + body);
-  const name = match(body, /(?:ホテル名|宿泊施設名)\s*\n?\s*(?:\[)?([^\]\n]+?)(?:\]\([^)]+\))?\s*\n/);
-  const address = match(body, /(?:住所|宿泊施設住所)\s*\n?\s*([^\n]+)/);
-  const phone = match(body, /(?:宿泊施設電話番号|連絡先)\s*\n?\s*(?:[^：\n]+：)?\s*([\d-]{10,})/);
-  const checkInText = match(body, /チェックイン(?:日時)?\s*\n?\s*((?:20\d{2})[-/]\d{1,2}[-/]\d{1,2}(?:\([^)]*\))?\s*\d{1,2}:\d{2})/);
-  const checkOutText = match(body, /チェックアウト(?:日)?\s*\n?\s*((?:20\d{2})[-/]\d{1,2}[-/]\d{1,2})/);
-  const roomType = match(body, /部屋タイプ\s*\n?\s*([^\n]+)/);
-  const plan = match(body, /(?:宿泊プラン|宿泊プラン名)\s*\n?\s*(?:\[)?([^\]\n]+?)(?:\]\([^)]+\))?\s*\n/);
-  const amount = Number((lastMatch(body, /(?:差引支払額(?:\s*消費税込)?\s*:?\s*|総合計\s*(?:消費税込:)?\s*)([\d,]+)\s*円/gi) || "0").replace(/,/g, ""));
+  const separator = String.raw`\s*(?:[:：]\s*|\n\s*)`;
+  const name = match(body, new RegExp(String.raw`(?:ホテル名|宿泊施設名)${separator}(?:\[)?([^\]\n]+?)(?:\]\([^)]+\))?(?=\n|$)`));
+  const address = match(body, new RegExp(String.raw`(?:住所|宿泊施設住所)${separator}([^\n]+)`));
+  const phone = match(body, new RegExp(String.raw`宿泊施設電話番号${separator}([\d-]{10,})`));
+  const checkInText = match(body, new RegExp(String.raw`チェックイン(?:日時)?${separator}【?((?:20\d{2})[-/]\d{1,2}[-/]\d{1,2}(?:\([^)]*\))?\s*\d{1,2}:\d{2})`));
+  const checkOutText = match(body, new RegExp(String.raw`チェックアウト(?:日)?${separator}【?((?:20\d{2})[-/]\d{1,2}[-/]\d{1,2})`));
+  const roomType = match(body, new RegExp(String.raw`部屋タイプ${separator}([^\n]+)`));
+  const plan = match(body, /(?:宿泊プラン名|プラン名)\s*(?:[:：]\s*|\n\s*)(?:\[)?([^\]\n]+?)(?:\]\([^)]+\))?(?=\n|$)/);
+  const amount = Number((lastMatch(body, /(?:差引支払額(?:\s*消費税込)?\s*[:：]?\s*(?:消費税込\s*[:：]?\s*)?|総合計\s*(?:消費税込\s*[:：]?\s*)?)([\d,]+)\s*円/gi) || "0").replace(/,/g, ""));
   const breakfast = /朝食[:：].*あり|朝食付/.test(body);
   const managementLink = firstLink(body, /予約確認ページ|予約の詳細確認|変更、キャンセル/i);
   return {
@@ -298,6 +316,10 @@ function combineDateTime(date, time, nextDay = false) {
 }
 function normalizeDateTime(value) {
   if (!value) return "";
+  const direct = new Date(value);
+  if (!Number.isNaN(direct.getTime()) && /T|Z|[+-]\d{2}:?\d{2}$/.test(String(value))) {
+    return direct.toISOString();
+  }
   const text = String(value).replace(/\([^)]*\)/g, "").trim().replace(/\//g, "-");
   const hasTime = /\d{1,2}:\d{2}/.test(text);
   const parsed = new Date(`${text}${hasTime ? "" : " 00:00"} GMT+0900`);
@@ -330,6 +352,17 @@ function uniqueBy(items, key) {
 }
 function sourceTime(booking) {
   return Math.max(Date.parse(booking.updatedAt || 0), ...((booking.source || []).map((item) => Date.parse(item.receivedAt || 0))));
+}
+function flightSignature(booking) {
+  const data = booking.parsed || booking.data || {};
+  if (!data.flightNumber || !data.startAt) return "";
+  const date = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Tokyo",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date(data.startAt));
+  return `${normalizeFlightNumber(data.flightNumber)}:${date}`;
 }
 function structuredCloneSafe(value) {
   return typeof structuredClone === "function" ? structuredClone(value) : JSON.parse(JSON.stringify(value));

@@ -97,33 +97,10 @@ export const cloudSync = {
     return hiddenBookings.length;
   },
   async replaceHotelBookings(nextHotels) {
-    ensureUser();
-    const nextIds = new Set(nextHotels.map((booking) => booking.id));
-    const operations = [
-      ...bookings
-        .filter((booking) => booking.type === "hotel" && booking.provider === "楽天トラベル" && !nextIds.has(booking.id))
-        .map((booking) => ({ type: "delete", id: booking.id })),
-      ...nextHotels.map((booking) => {
-        const current = bookings.find((item) => item.id === booking.id);
-        return {
-          type: "set",
-          booking: {
-            ...booking,
-            overrides: current?.overrides || booking.overrides || {},
-            hidden: current?.hidden || false,
-          },
-        };
-      }),
-    ];
-    for (let index = 0; index < operations.length; index += 400) {
-      const batch = writeBatch(db);
-      operations.slice(index, index + 400).forEach((operation) => {
-        const target = doc(bookingsRef(), operation.id || operation.booking.id);
-        if (operation.type === "delete") batch.delete(target);
-        else batch.set(target, operation.booking);
-      });
-      await batch.commit();
-    }
+    await replaceProviderBookings("楽天トラベル", nextHotels);
+  },
+  async replaceFlightBookings(nextFlights) {
+    await replaceProviderBookings("JAL", nextFlights);
   },
 };
 
@@ -164,6 +141,35 @@ function settingsRef() {
 }
 function ensureUser() {
   if (!currentUser) throw new Error("Googleログインが必要です。");
+}
+async function replaceProviderBookings(providerName, nextBookings) {
+  ensureUser();
+  const nextIds = new Set(nextBookings.map((booking) => booking.id));
+  const operations = [
+    ...bookings
+      .filter((booking) => booking.provider === providerName && !nextIds.has(booking.id))
+      .map((booking) => ({ type: "delete", id: booking.id })),
+    ...nextBookings.map((booking) => {
+      const current = bookings.find((item) => item.id === booking.id);
+      return {
+        type: "set",
+        booking: {
+          ...booking,
+          overrides: current?.overrides || booking.overrides || {},
+          hidden: current?.hidden || false,
+        },
+      };
+    }),
+  ];
+  for (let index = 0; index < operations.length; index += 400) {
+    const batch = writeBatch(db);
+    operations.slice(index, index + 400).forEach((operation) => {
+      const target = doc(bookingsRef(), operation.id || operation.booking.id);
+      if (operation.type === "delete") batch.delete(target);
+      else batch.set(target, operation.booking);
+    });
+    await batch.commit();
+  }
 }
 function defaultSettings() {
   return { homeAirport: "福岡", lastSyncedAt: "" };
