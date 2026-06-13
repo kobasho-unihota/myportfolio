@@ -1,0 +1,16 @@
+{
+  "name": "Medipass 医療費記録",
+  "short_name": "Medipass",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#f4f7f5",
+  "theme_color": "#f4f7f5",
+  "icons": [
+    {
+      "src": "./icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

@@ -1,0 +1,254 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#f4f7f5">
+  <meta name="description" content="医療費控除に向けて、家族の医療費と領収書を日々記録・集計する端末内保存のWebアプリ。">
+  <title>Medipass | 医療費記録</title>
+  <link rel="manifest" href="./site.webmanifest">
+  <link rel="icon" href="./icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+  <div class="app-shell">
+    <header class="topbar">
+      <a class="brand" href="#" aria-label="Medipass ホーム">
+        <span class="brand-mark" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M12 3v18M3 12h18"/></svg>
+        </span>
+        <span>
+          <strong>Medipass</strong>
+          <small>医療費記録</small>
+        </span>
+      </a>
+      <div class="top-actions">
+        <button class="account-button" id="accountButton" type="button">
+          <span class="sync-indicator" id="syncIndicator"></span>
+          <span id="accountLabel">Googleで同期</span>
+        </button>
+        <label class="year-select">
+          <span class="sr-only">集計年</span>
+          <select id="yearFilter" aria-label="集計年"></select>
+        </label>
+        <button class="icon-button" id="settingsButton" type="button" aria-label="データ管理を開く">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06-2.86 2.86-.06-.06A1.7 1.7 0 0 0 15 19.4a1.7 1.7 0 0 0-1 .6 1.7 1.7 0 0 0-.4 1.1V21H9.55v-.09A1.7 1.7 0 0 0 8.5 19.4a1.7 1.7 0 0 0-1.88.34l-.06.06-2.86-2.86.06-.06A1.7 1.7 0 0 0 4.1 15a1.7 1.7 0 0 0-.6-1 1.7 1.7 0 0 0-1.1-.4H2.3V9.55h.1A1.7 1.7 0 0 0 4.1 8.5a1.7 1.7 0 0 0-.34-1.88l-.06-.06L6.56 3.7l.06.06A1.7 1.7 0 0 0 8.5 4.1a1.7 1.7 0 0 0 1-.6 1.7 1.7 0 0 0 .4-1.1V2.3h4.05v.1A1.7 1.7 0 0 0 15 4.1a1.7 1.7 0 0 0 1.88-.34l.06-.06 2.86 2.86-.06.06A1.7 1.7 0 0 0 19.4 8.5a1.7 1.7 0 0 0 .6 1 1.7 1.7 0 0 0 1.1.4h.1v4.05h-.1A1.7 1.7 0 0 0 19.4 15Z"/></svg>
+        </button>
+      </div>
+    </header>
+
+    <main>
+      <section class="hero">
+        <div>
+          <p class="eyebrow" id="todayLabel"></p>
+          <h1>今年の医療費を、<br><span>迷わず整える。</span></h1>
+          <p class="hero-copy">通院した日に記録して、確定申告の準備を少しずつ。GoogleログインでPCとスマホの記録を同期できます。</p>
+        </div>
+        <button class="primary-button hero-button" id="openEntryButton" type="button">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+          医療費を記録
+        </button>
+      </section>
+
+      <section class="summary-grid" aria-label="年間サマリー">
+        <article class="summary-card summary-card-main">
+          <div class="summary-heading">
+            <span>対象医療費</span>
+            <span class="status-dot">自動集計</span>
+          </div>
+          <strong id="eligibleTotal">¥0</strong>
+          <div class="progress-track" aria-hidden="true"><span id="thresholdProgress"></span></div>
+          <p id="thresholdMessage">控除の目安まで ¥100,000</p>
+        </article>
+        <article class="summary-card">
+          <span>支払った合計</span>
+          <strong id="paidTotal">¥0</strong>
+          <small id="recordCount">0件の記録</small>
+        </article>
+        <article class="summary-card">
+          <span>補てん金額</span>
+          <strong id="compensationTotal">¥0</strong>
+          <small>保険金・給付金など</small>
+        </article>
+        <article class="summary-card accent-card">
+          <span>医療費控除額の概算</span>
+          <strong id="deductionTotal">¥0</strong>
+          <button class="text-button" id="incomeButton" type="button">所得金額を設定 <span>→</span></button>
+        </article>
+      </section>
+
+      <section class="content-grid">
+        <div class="records-panel">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">RECORDS</p>
+              <h2>医療費の記録</h2>
+            </div>
+            <button class="secondary-button desktop-add" id="desktopEntryButton" type="button">＋ 新しく記録</button>
+          </div>
+
+          <div class="filter-bar">
+            <label class="search-field">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg>
+              <input id="searchInput" type="search" placeholder="病院・薬局・メモを検索">
+            </label>
+            <select id="personFilter" aria-label="受診者で絞り込み">
+              <option value="">家族全員</option>
+            </select>
+            <select id="categoryFilter" aria-label="区分で絞り込み">
+              <option value="">すべての区分</option>
+              <option value="診療・治療">診療・治療</option>
+              <option value="医薬品">医薬品</option>
+              <option value="介護保険サービス">介護保険サービス</option>
+              <option value="その他">その他</option>
+            </select>
+          </div>
+
+          <div id="recordsList" class="records-list" aria-live="polite"></div>
+        </div>
+
+        <aside class="insights-panel">
+          <article class="insight-card">
+            <div class="section-heading compact">
+              <div>
+                <p class="eyebrow">BREAKDOWN</p>
+                <h2>家族別</h2>
+              </div>
+            </div>
+            <div id="personBreakdown" class="breakdown-list"></div>
+          </article>
+          <article class="insight-card tip-card">
+            <span class="tip-icon" aria-hidden="true">✓</span>
+            <div>
+              <strong>領収書は手元に保管</strong>
+              <p>明細書を提出した後も、原則として確定申告期限から5年間は領収書の提示を求められる場合があります。</p>
+              <a href="https://www.nta.go.jp/taxes/shiraberu/taxanswer/shotoku/1120.htm" target="_blank" rel="noreferrer">国税庁の案内を見る</a>
+            </div>
+          </article>
+        </aside>
+      </section>
+    </main>
+  </div>
+
+  <button class="floating-button" id="floatingEntryButton" type="button" aria-label="医療費を記録">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+  </button>
+
+  <dialog id="entryDialog" class="app-dialog" aria-labelledby="entryDialogTitle">
+    <form id="entryForm" method="dialog" novalidate>
+      <div class="dialog-header">
+        <div>
+          <p class="eyebrow">MEDICAL EXPENSE</p>
+          <h2 id="entryDialogTitle">医療費を記録</h2>
+        </div>
+        <button class="icon-button close-button" type="button" data-close-dialog aria-label="閉じる">×</button>
+      </div>
+      <input id="recordId" type="hidden">
+      <div class="form-grid">
+        <label class="field">
+          <span>支払日 <b>必須</b></span>
+          <input id="paidDate" name="paidDate" type="date" required>
+        </label>
+        <label class="field">
+          <span>医療を受けた人 <b>必須</b></span>
+          <input id="personName" name="personName" type="text" list="personSuggestions" placeholder="例：本人" maxlength="40" required>
+          <datalist id="personSuggestions"></datalist>
+        </label>
+        <label class="field field-wide">
+          <span>病院・薬局などの名称 <b>必須</b></span>
+          <input id="providerName" name="providerName" type="text" list="providerSuggestions" placeholder="例：みどりクリニック" maxlength="80" required>
+          <datalist id="providerSuggestions"></datalist>
+        </label>
+        <label class="field">
+          <span>医療費の区分</span>
+          <select id="category" name="category">
+            <option value="診療・治療">診療・治療</option>
+            <option value="医薬品">医薬品</option>
+            <option value="介護保険サービス">介護保険サービス</option>
+            <option value="その他">その他</option>
+          </select>
+        </label>
+        <label class="field">
+          <span>支払方法</span>
+          <select id="paymentMethod" name="paymentMethod">
+            <option value="現金">現金</option>
+            <option value="クレジットカード">クレジットカード</option>
+            <option value="電子マネー">電子マネー</option>
+            <option value="口座振替">口座振替</option>
+            <option value="その他">その他</option>
+          </select>
+        </label>
+        <label class="field">
+          <span>支払った医療費 <b>必須</b></span>
+          <div class="money-input"><span>¥</span><input id="amount" name="amount" type="number" inputmode="numeric" min="1" step="1" placeholder="0" required></div>
+        </label>
+        <label class="field">
+          <span>補てんされる金額</span>
+          <div class="money-input"><span>¥</span><input id="compensation" name="compensation" type="number" inputmode="numeric" min="0" step="1" placeholder="0"></div>
+        </label>
+        <label class="field">
+          <span>通院交通費</span>
+          <div class="money-input"><span>¥</span><input id="transportation" name="transportation" type="number" inputmode="numeric" min="0" step="1" placeholder="0"></div>
+        </label>
+        <label class="field">
+          <span>領収書</span>
+          <select id="receiptStatus" name="receiptStatus">
+            <option value="保管済み">保管済み</option>
+            <option value="未整理">未整理</option>
+            <option value="医療費通知に記載">医療費通知に記載</option>
+            <option value="領収書なし">領収書なし</option>
+          </select>
+        </label>
+        <label class="check-field field-wide">
+          <input id="eligible" name="eligible" type="checkbox" checked>
+          <span><strong>医療費控除の集計対象に含める</strong><small>対象になるか不明な場合は、あとで確認できるようメモを残してください。</small></span>
+        </label>
+        <label class="field field-wide">
+          <span>メモ</span>
+          <textarea id="memo" name="memo" rows="3" maxlength="300" placeholder="治療内容、交通経路、領収書の保管場所など"></textarea>
+        </label>
+      </div>
+      <p class="form-error" id="formError" role="alert"></p>
+      <div class="dialog-actions">
+        <button class="secondary-button" type="button" data-close-dialog>キャンセル</button>
+        <button class="primary-button" type="submit">記録を保存</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="dataDialog" class="app-dialog small-dialog" aria-labelledby="dataDialogTitle">
+    <div class="dialog-header">
+      <div><p class="eyebrow">DATA & SETTINGS</p><h2 id="dataDialogTitle">データ管理</h2></div>
+      <button class="icon-button close-button" type="button" data-close-data aria-label="閉じる">×</button>
+    </div>
+    <section class="sync-card">
+      <div>
+        <strong id="syncTitle">この端末だけで利用中</strong>
+        <p id="syncDescription">Googleでログインすると、PCとスマホで同じ記録を閲覧・編集できます。</p>
+      </div>
+      <button class="secondary-button" id="syncActionButton" type="button">Googleでログイン</button>
+    </section>
+    <label class="field">
+      <span><b id="incomeYearLabel"></b>年分の総所得金額等（概算用）</span>
+      <div class="money-input"><span>¥</span><input id="incomeAmount" type="number" inputmode="numeric" min="0" step="1" placeholder="未設定"></div>
+      <small>200万円未満の場合、控除額計算の基準は所得の5%になります。</small>
+    </label>
+    <div class="data-actions">
+      <button class="secondary-button" id="exportCsvButton" type="button">CSVを書き出す</button>
+      <button class="secondary-button" id="exportJsonButton" type="button">バックアップ</button>
+      <label class="secondary-button file-button">復元する<input id="importJsonInput" type="file" accept="application/json"></label>
+    </div>
+    <div class="privacy-note">
+      <strong>プライバシーについて</strong>
+      <p id="privacyDescription">未ログイン時はブラウザ内に保存されます。Googleログイン中は、同じアカウントの端末で使えるようクラウドへ同期されます。共有端末では利用後にログアウトしてください。</p>
+    </div>
+    <button class="danger-button" id="deleteAllButton" type="button">すべての記録を削除</button>
+    <div class="dialog-actions">
+      <button class="primary-button" id="saveSettingsButton" type="button">設定を保存</button>
+    </div>
+  </dialog>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  <script type="module" src="./app.mjs"></script>
+</body>
+</html>
