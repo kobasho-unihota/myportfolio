@@ -1,0 +1,21 @@
+{
+  "name": "TripBoard 出張予約",
+  "short_name": "TripBoard",
+  "id": "./",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f3f6f9",
+  "theme_color": "#102a43",
+  "orientation": "portrait-primary",
+  "categories": ["travel", "productivity"],
+  "icons": [
+    { "src": "./icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "./icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ],
+  "shortcuts": [
+    { "name": "予約メールを更新", "short_name": "更新", "url": "./#sync" },
+    { "name": "予約一覧", "short_name": "予約", "url": "./#bookings" }
+  ]
+}
+

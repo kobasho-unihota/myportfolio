@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#102a43">
+  <meta name="description" content="GmailからJALと楽天トラベルの予約をまとめる、iPhone向け出張ダッシュボード。">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="TripBoard">
+  <meta name="format-detection" content="telephone=no">
+  <title>TripBoard | 出張予約</title>
+  <link rel="manifest" href="./site.webmanifest?v=2">
+  <link rel="icon" href="./icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="./apple-touch-icon.png">
+  <link rel="stylesheet" href="./styles.css?v=2">
+</head>
+<body>
+  <div class="app-shell">
+    <header class="topbar">
+      <a class="brand" href="#home" aria-label="TripBoard ホーム">
+        <span class="brand-mark" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M3 15.5 21 8l-7.5 13-2-7-8.5 1.5Z"/><path d="m11.5 14 4-4"/></svg>
+        </span>
+        <span><strong>TripBoard</strong><small>BUSINESS TRAVEL</small></span>
+      </a>
+      <button class="account-button" id="accountButton" type="button">
+        <span class="sync-dot" id="syncDot"></span><span id="accountLabel">Googleで同期</span>
+      </button>
+    </header>
+
+    <main>
+      <section class="connection-banner" id="connectionBanner" hidden>
+        <span></span><p id="connectionMessage"></p>
+      </section>
+
+      <section class="view active" id="homeView">
+        <div class="hero">
+          <div><p class="eyebrow" id="todayLabel"></p><h1>次の出張</h1></div>
+          <button class="round-button" id="heroSyncButton" type="button" aria-label="Gmailを更新">
+            <svg viewBox="0 0 24 24"><path d="M20 7v5h-5"/><path d="M4 17v-5h5"/><path d="M6.1 9a7 7 0 0 1 11.6-2L20 9M4 15l2.3 2a7 7 0 0 0 11.6-2"/></svg>
+          </button>
+        </div>
+        <div id="nextTrip"></div>
+        <section class="section-block">
+          <div class="section-heading"><div><p class="eyebrow">UPCOMING</p><h2>その次の予定</h2></div></div>
+          <div class="trip-list" id="upcomingTrips"></div>
+        </section>
+      </section>
+
+      <section class="view" id="bookingsView">
+        <div class="page-heading">
+          <div><p class="eyebrow">ALL BOOKINGS</p><h1>予約一覧</h1></div>
+          <button class="primary-button compact" id="addBookingButton" type="button">＋ 追加</button>
+        </div>
+        <div class="filter-tabs" role="tablist">
+          <button class="active" data-filter="active" type="button">予定</button>
+          <button data-filter="all" type="button">すべて</button>
+          <button data-filter="cancelled" type="button">取消</button>
+        </div>
+        <div class="booking-list" id="bookingList"></div>
+      </section>
+
+      <section class="view sync-view" id="syncView">
+        <div class="sync-orbit" aria-hidden="true">
+          <span class="orbit-plane"><svg viewBox="0 0 24 24"><path d="M3 15.5 21 8l-7.5 13-2-7-8.5 1.5Z"/></svg></span>
+        </div>
+        <p class="eyebrow">GMAIL IMPORT</p>
+        <h1>予約メールを更新</h1>
+        <p>JAL国内線と楽天トラベルのメールを読み込みます。メール本文やアクセストークンは保存しません。</p>
+        <button class="primary-button sync-main-button" id="syncNowButton" type="button">Gmailから更新する</button>
+        <div class="progress-card" id="syncProgress" hidden>
+          <strong id="syncProgressTitle">メールを検索中</strong>
+          <div><span id="syncProgressBar"></span></div>
+          <small id="syncProgressText"></small>
+        </div>
+        <small class="last-sync" id="lastSyncLabel">まだ更新されていません</small>
+      </section>
+
+      <section class="view" id="settingsView">
+        <div class="page-heading"><div><p class="eyebrow">SETTINGS</p><h1>設定</h1></div></div>
+        <section class="settings-card">
+          <label class="field"><span>自宅空港</span><input id="homeAirportInput" value="福岡" placeholder="福岡"></label>
+          <p>出発便と復路便を判定し、同じ出張としてまとめるために使います。</p>
+          <button class="primary-button" id="saveSettingsButton" type="button">設定を保存</button>
+        </section>
+        <section class="settings-card">
+          <strong id="accountSettingsTitle">Googleアカウント</strong>
+          <p id="accountSettingsCopy">ログインすると、予約と手修正内容をiPhone・PC間で同期できます。</p>
+          <button class="secondary-button" id="accountSettingsButton" type="button">Googleでログイン</button>
+        </section>
+        <section class="privacy-card">
+          <strong>プライバシー</strong>
+          <p>Gmailアクセストークンは更新中だけメモリに保持します。Firestoreには解析後の予約情報だけを保存します。</p>
+        </section>
+      </section>
+    </main>
+  </div>
+
+  <nav class="bottom-nav" aria-label="メインメニュー">
+    <button class="active" data-view="home" type="button"><svg viewBox="0 0 24 24"><path d="m3 11 9-8 9 8v10h-6v-6H9v6H3Z"/></svg><span>次の出張</span></button>
+    <button data-view="bookings" type="button"><svg viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="15" rx="2"/><path d="M8 3v4M16 3v4M4 10h16"/></svg><span>予約一覧</span></button>
+    <button class="sync-nav" data-view="sync" type="button"><span><svg viewBox="0 0 24 24"><path d="M20 7v5h-5M4 17v-5h5"/><path d="M6.1 9a7 7 0 0 1 11.6-2L20 9M4 15l2.3 2a7 7 0 0 0 11.6-2"/></svg></span><b>更新</b></button>
+    <button data-view="settings" type="button"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1-2.8 2.8-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.6v.1H10V21a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1L4.2 17l.1-.1a1.7 1.7 0 0 0 .3-1.9A1.7 1.7 0 0 0 3 14H3v-4h.1a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9L4.2 7 7 4.2l.1.1a1.7 1.7 0 0 0 1.9.3A1.7 1.7 0 0 0 10 3h4a1.7 1.7 0 0 0 1 1.6 1.7 1.7 0 0 0 1.9-.3l.1-.1L19.8 7l-.1.1a1.7 1.7 0 0 0-.3 1.9A1.7 1.7 0 0 0 21 10h.1v4H21a1.7 1.7 0 0 0-1.6 1Z"/></svg><span>設定</span></button>
+  </nav>
+
+  <dialog class="app-dialog" id="bookingDialog">
+    <form id="bookingForm">
+      <div class="dialog-header"><div><p class="eyebrow">BOOKING</p><h2 id="bookingDialogTitle">予約を編集</h2></div><button class="close-button" data-close type="button">×</button></div>
+      <input id="bookingId" type="hidden">
+      <label class="field"><span>種類</span><select id="bookingType"><option value="flight">飛行機</option><option value="hotel">ホテル</option></select></label>
+      <div id="flightFields" class="form-grid">
+        <label class="field"><span>便名</span><input id="flightNumber" placeholder="JAL3513"></label>
+        <label class="field"><span>予約番号</span><input id="flightReservationNumber"></label>
+        <label class="field"><span>出発</span><input id="flightOrigin" placeholder="福岡"></label>
+        <label class="field"><span>到着</span><input id="flightDestination" placeholder="札幌（新千歳）"></label>
+        <label class="field"><span>出発日時</span><input id="flightStartAt" type="datetime-local"></label>
+        <label class="field"><span>到着日時</span><input id="flightEndAt" type="datetime-local"></label>
+        <label class="field"><span>座席</span><input id="flightSeat" placeholder="30J"></label>
+      </div>
+      <div id="hotelFields" class="form-grid" hidden>
+        <label class="field field-wide"><span>ホテル名</span><input id="hotelName"></label>
+        <label class="field"><span>チェックイン</span><input id="hotelCheckIn" type="datetime-local"></label>
+        <label class="field"><span>チェックアウト</span><input id="hotelCheckOut" type="datetime-local"></label>
+        <label class="field field-wide"><span>住所</span><input id="hotelAddress"></label>
+        <label class="field"><span>電話番号</span><input id="hotelPhone" inputmode="tel"></label>
+        <label class="field"><span>予約番号</span><input id="hotelReservationNumber"></label>
+        <label class="field field-wide"><span>部屋タイプ</span><input id="hotelRoomType"></label>
+        <label class="field"><span>支払額</span><input id="hotelAmount" type="number" inputmode="numeric"></label>
+        <label class="check-field"><input id="hotelBreakfast" type="checkbox"><span>朝食あり</span></label>
+      </div>
+      <p class="form-error" id="formError"></p>
+      <div class="dialog-actions"><button class="secondary-button" data-close type="button">キャンセル</button><button class="primary-button" type="submit">保存</button></div>
+    </form>
+  </dialog>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  <script type="module" src="./app.mjs?v=2"></script>
+</body>
+</html>
