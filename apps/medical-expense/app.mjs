@@ -22,10 +22,15 @@ let state = loadState();
 let syncStatus = "loading";
 let cloudInitialized = false;
 let preparedReceiptImage = null;
+let receiptFiles = [];
+let receiptIndex = 0;
+let receiptReviewPending = false;
 let cloudSync = {
   user: null,
   signIn: async () => { throw new Error("同期機能を利用できません。"); },
   signOut: async () => {},
+  retry: async () => {},
+  lastError: null,
 };
 
 const elements = {
@@ -52,6 +57,9 @@ function initialize() {
   bindEvents();
   render();
   initializeCloudSync();
+  registerServiceWorker();
+  updateConnectionUi();
+  handleLaunchAction();
 }
 
 function bindEvents() {
@@ -65,13 +73,13 @@ function bindEvents() {
   $("#accountButton").addEventListener("click", handleAccountAction);
   $("#incomeButton").addEventListener("click", openDataDialog);
   document.querySelectorAll("[data-close-dialog]").forEach((button) =>
-    button.addEventListener("click", () => elements.entryDialog.close())
+    button.addEventListener("click", closeEntryDialog)
   );
   document.querySelectorAll("[data-close-data]").forEach((button) =>
     button.addEventListener("click", () => elements.dataDialog.close())
   );
   document.querySelectorAll("[data-close-receipt]").forEach((button) =>
-    button.addEventListener("click", () => elements.receiptDialog.close())
+    button.addEventListener("click", closeReceiptDialog)
   );
   elements.entryForm.addEventListener("submit", saveRecord);
   elements.entryForm.addEventListener("input", (event) => {
@@ -93,12 +101,30 @@ function bindEvents() {
   $("#exportJsonButton").addEventListener("click", exportJson);
   $("#importJsonInput").addEventListener("change", importJson);
   $("#deleteAllButton").addEventListener("click", deleteAll);
+  $("#navHomeButton").addEventListener("click", () => window.scrollTo({ top: 0, behavior: "smooth" }));
+  $("#navReceiptButton").addEventListener("click", openReceiptDialog);
+  $("#navAddButton").addEventListener("click", () => openEntryDialog());
+  $("#navSettingsButton").addEventListener("click", openDataDialog);
+  $("#retrySyncButton").addEventListener("click", retrySync);
+  window.addEventListener("online", updateConnectionUi);
+  window.addEventListener("offline", updateConnectionUi);
   $("#receiptImageInput").addEventListener("change", handleReceiptImage);
   $("#changeReceiptButton").addEventListener("click", () => $("#receiptImageInput").click());
   $("#analyzeReceiptButton").addEventListener("click", handleReceiptAnalysis);
+  elements.entryDialog.addEventListener("cancel", (event) => {
+    event.preventDefault();
+    closeEntryDialog();
+  });
+  elements.receiptDialog.addEventListener("cancel", (event) => {
+    event.preventDefault();
+    closeReceiptDialog();
+  });
   [elements.entryDialog, elements.dataDialog, elements.receiptDialog].forEach((dialog) => {
     dialog.addEventListener("click", (event) => {
-      if (event.target === dialog) dialog.close();
+      if (event.target !== dialog) return;
+      if (dialog === elements.entryDialog) closeEntryDialog();
+      else if (dialog === elements.receiptDialog) closeReceiptDialog();
+      else dialog.close();
     });
   });
 }
@@ -235,33 +261,54 @@ function openEntryDialog(record = null) {
   window.setTimeout(() => $("#providerName").focus(), 50);
 }
 
-function openReceiptDialog() {
+function openReceiptDialog({ preserveBatch = false } = {}) {
   if (elements.entryDialog.open) elements.entryDialog.close();
-  preparedReceiptImage = null;
-  $("#receiptImageInput").value = "";
-  $("#receiptConsent").checked = false;
+  if (!preserveBatch) {
+    preparedReceiptImage = null;
+    receiptFiles = [];
+    receiptIndex = 0;
+    receiptReviewPending = false;
+    $("#receiptImageInput").value = "";
+    $("#receiptConsent").checked = false;
+  }
   $("#receiptError").textContent = "";
-  $("#receiptPreview").hidden = true;
-  $("#receiptPicker").hidden = false;
   $("#receiptProgress").hidden = true;
   $("#analyzeReceiptButton").disabled = false;
+  $("#receiptPicker").hidden = receiptFiles.length > 0;
+  $("#receiptPreview").hidden = receiptFiles.length === 0;
+  if (receiptFiles.length) prepareCurrentReceipt();
   elements.receiptDialog.showModal();
 }
 
 async function handleReceiptImage(event) {
-  const file = event.target.files?.[0];
+  const files = [...(event.target.files || [])];
+  if (!files.length) return;
+  receiptFiles = files;
+  receiptIndex = 0;
+  receiptReviewPending = false;
+  await prepareCurrentReceipt();
+}
+
+async function prepareCurrentReceipt() {
+  const file = receiptFiles[receiptIndex];
   if (!file) return;
+  preparedReceiptImage = null;
   $("#receiptError").textContent = "";
+  $("#receiptQueueLabel").textContent = `${receiptIndex + 1} / ${receiptFiles.length}枚目`;
+  $("#receiptFileName").textContent = file.name;
+  $("#receiptPicker").hidden = true;
+  $("#receiptPreview").hidden = false;
+  $("#receiptPreviewImage").removeAttribute("src");
+  $("#analyzeReceiptButton").disabled = true;
   try {
     preparedReceiptImage = await prepareImage(file);
     $("#receiptPreviewImage").src = preparedReceiptImage.dataUrl;
-    $("#receiptPicker").hidden = true;
-    $("#receiptPreview").hidden = false;
   } catch (error) {
-    preparedReceiptImage = null;
     $("#receiptError").textContent = error.message === "IMAGE_TOO_LARGE"
       ? "画像は10MB以下で選択してください。"
       : "この画像を読み込めませんでした。JPEGまたはPNGでお試しください。";
+  } finally {
+    $("#analyzeReceiptButton").disabled = !preparedReceiptImage;
   }
 }
 
@@ -285,6 +332,7 @@ async function handleReceiptAnalysis() {
   $("#analyzeReceiptButton").disabled = true;
   try {
     const result = await analyzeReceipt({ apiKey, image: preparedReceiptImage });
+    receiptReviewPending = true;
     elements.receiptDialog.close();
     openEntryDialog();
     if (result.paidDate) $("#paidDate").value = result.paidDate;
@@ -373,7 +421,38 @@ async function saveRecord(event) {
   elements.yearFilter.value = String(selectedYear);
   elements.entryDialog.close();
   render();
+  if (!previous && receiptReviewPending) {
+    receiptReviewPending = false;
+    receiptIndex += 1;
+    if (receiptIndex < receiptFiles.length) {
+      showToast(`${receiptIndex}枚目を登録しました。次の写真を確認します`);
+      window.setTimeout(() => openReceiptDialog({ preserveBatch: true }), 250);
+      return;
+    }
+    const count = receiptFiles.length;
+    resetReceiptBatch();
+    showToast(`${count}枚の領収書を登録しました`);
+    return;
+  }
   showToast(previous ? "記録を更新しました" : "医療費を記録しました");
+}
+
+function closeEntryDialog() {
+  elements.entryDialog.close();
+  if (receiptReviewPending) resetReceiptBatch();
+}
+
+function closeReceiptDialog() {
+  elements.receiptDialog.close();
+  resetReceiptBatch();
+}
+
+function resetReceiptBatch() {
+  preparedReceiptImage = null;
+  receiptFiles = [];
+  receiptIndex = 0;
+  receiptReviewPending = false;
+  $("#receiptImageInput").value = "";
 }
 
 async function handleRecordAction(event) {
@@ -524,7 +603,9 @@ async function handleAccountAction() {
 
 async function handleCloudChange(detail) {
   syncStatus = detail.status;
+  cloudSync.lastError = detail.error;
   renderSyncUi();
+  updateConnectionUi();
   if (detail.status === "signed-out" && cloudInitialized) {
     cloudInitialized = false;
     state = loadState();
@@ -567,12 +648,14 @@ async function initializeCloudSync() {
   } catch {
     syncStatus = "unavailable";
     renderSyncUi();
+    updateConnectionUi();
   }
 }
 
 function setSyncStatus(status) {
   syncStatus = status;
   renderSyncUi();
+  updateConnectionUi();
 }
 
 function renderSyncUi() {
@@ -594,6 +677,58 @@ function renderSyncUi() {
     $("#syncActionButton").disabled = syncStatus === "unavailable";
     $("#privacyDescription").textContent = "未ログイン時はブラウザ内に保存されます。Googleログイン中は、同じアカウントの端末で使えるようクラウドへ同期されます。共有端末では利用後にログアウトしてください。";
   }
+}
+
+async function retrySync() {
+  if (!navigator.onLine) return showToast("インターネット接続を確認してください", true);
+  try {
+    setSyncStatus("syncing");
+    await cloudSync.retry();
+  } catch {
+    setSyncStatus("error");
+    updateConnectionUi();
+  }
+}
+
+function updateConnectionUi() {
+  const banner = $("#connectionBanner");
+  const message = $("#connectionMessage");
+  const retryButton = $("#retrySyncButton");
+  if (!navigator.onLine) {
+    banner.hidden = false;
+    banner.className = "connection-banner offline";
+    message.textContent = "オフラインです。端末モードの記録は利用できます。";
+    retryButton.hidden = true;
+    return;
+  }
+  if (syncStatus === "error") {
+    const permissionDenied = cloudSync.lastError?.code?.includes("permission-denied");
+    banner.hidden = false;
+    banner.className = "connection-banner error";
+    message.textContent = permissionDenied
+      ? "クラウドのアクセス権を確認できませんでした。ログインし直してください。"
+      : "クラウド同期に失敗しました。端末の記録は保持されています。";
+    retryButton.hidden = false;
+    return;
+  }
+  banner.hidden = true;
+}
+
+function registerServiceWorker() {
+  if (!("serviceWorker" in navigator) || location.protocol === "file:") return;
+  navigator.serviceWorker.register("./sw.js").catch(() => {
+    // The app remains usable without offline caching.
+  });
+}
+
+function handleLaunchAction() {
+  const action = new URLSearchParams(location.search).get("action");
+  if (!action) return;
+  history.replaceState(null, "", location.pathname);
+  window.setTimeout(() => {
+    if (action === "scan") openReceiptDialog();
+    if (action === "add") openEntryDialog();
+  }, 100);
 }
 
 function download(filename, content, type) {

@@ -2,18 +2,18 @@
 <html lang="ja">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
   <meta name="theme-color" content="#f4f7f5">
   <meta name="description" content="領収書のAI読み取りにも対応した、家族の医療費を日々記録・集計するWebアプリ。">
-
-
-
-
-
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="Medipass">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="format-detection" content="telephone=no">
   <title>Medipass | 医療費記録</title>
   <link rel="manifest" href="./site.webmanifest">
   <link rel="icon" href="./icon.svg" type="image/svg+xml">
-
+  <link rel="apple-touch-icon" href="./apple-touch-icon.png">
   <link rel="stylesheet" href="./styles.css">
 
 
@@ -59,11 +59,11 @@
     </header>
 
     <main>
-
-
-
-
-
+      <section class="connection-banner" id="connectionBanner" hidden aria-live="polite">
+        <span></span>
+        <p id="connectionMessage"></p>
+        <button id="retrySyncButton" type="button">再試行</button>
+      </section>
       <section class="hero">
         <div>
           <p class="eyebrow" id="todayLabel"></p>
@@ -73,7 +73,7 @@
         <div class="hero-actions">
           <button class="secondary-button hero-button" id="openReceiptButton" type="button">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h3l1.4-2h7.2L17 7h3v12H4Z"/><circle cx="12" cy="13" r="3.5"/></svg>
-            領収書を撮る
+            領収書をまとめて読む
           </button>
           <button class="primary-button hero-button" id="openEntryButton" type="button">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
@@ -177,7 +177,7 @@
       </div>
       <button class="receipt-inline-button" id="entryReceiptButton" type="button">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h3l1.4-2h7.2L17 7h3v12H4Z"/><circle cx="12" cy="13" r="3.5"/></svg>
-        領収書をAIで読み取る
+        複数の領収書をAIで読み取る
       </button>
       <input id="recordId" type="hidden">
       <div class="form-grid">
@@ -264,7 +264,7 @@
       </div>
       <button class="secondary-button" id="syncActionButton" type="button">Googleでログイン</button>
     </section>
-
+    <p class="auth-note">認証と同期には既存のFirebaseプロジェクト「SeedNote」を使用しています。Googleの認証画面にSeedNoteと表示されますが、Medipassのデータは専用領域へ分けて保存されます。</p>
     <label class="field">
       <span>Gemini APIキー（AI読み取り用）</span>
       <input id="geminiApiKey" type="password" autocomplete="off" placeholder="AIzaSy...">
@@ -299,18 +299,21 @@
         </div>
         <button class="icon-button close-button" type="button" data-close-receipt aria-label="閉じる">×</button>
       </div>
-      <p class="receipt-lead">領収書を撮影または選択すると、支払日・病院名・金額をAIが下書きします。保存前に必ず内容を確認してください。</p>
+      <p class="receipt-lead">領収書をまとめて選択できます。AIが1枚ずつ下書きし、内容を確認して保存すると次の写真へ進みます。</p>
       <label class="receipt-picker" id="receiptPicker">
-        <input id="receiptImageInput" type="file" accept="image/*" capture="environment">
+        <input id="receiptImageInput" type="file" accept="image/*" multiple>
         <span class="receipt-picker-icon">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h3l1.4-2h7.2L17 7h3v12H4Z"/><circle cx="12" cy="13" r="3.5"/></svg>
         </span>
-        <strong>領収書を撮影・選択</strong>
-        <small>JPEG・PNG・HEICなど、10MBまで</small>
+        <strong>領収書を撮影・まとめて選択</strong>
+        <small>複数選択可・1枚10MBまで</small>
       </label>
       <div class="receipt-preview" id="receiptPreview" hidden>
+        <div class="receipt-queue-status">
+          <strong id="receiptQueueLabel">1 / 1枚目</strong>
+          <span id="receiptFileName"></span>
+        </div>
         <img id="receiptPreviewImage" alt="選択した領収書のプレビュー">
-        <button class="secondary-button" id="changeReceiptButton" type="button">写真を選び直す</button>
 
 
 
@@ -318,10 +321,11 @@
 
 
 
+        <button class="secondary-button" id="changeReceiptButton" type="button">写真をまとめて選び直す</button>
       </div>
       <label class="consent-field">
         <input id="receiptConsent" type="checkbox">
-        <span><strong>画像をGoogle Gemini APIへ送信することに同意します</strong><small>画像には氏名や医療情報が含まれる場合があります。画像はMedipassには保存しません。</small></span>
+        <span><strong>選択した画像をGoogle Gemini APIへ送信することに同意します</strong><small>画像には氏名や医療情報が含まれる場合があります。画像は1枚ずつ送信し、Medipassには保存しません。</small></span>
       </label>
       <p class="form-error" id="receiptError" role="alert"></p>
       <div class="receipt-progress" id="receiptProgress" hidden>
@@ -337,7 +341,7 @@
       </div>
       <div class="dialog-actions">
         <button class="secondary-button" type="button" data-close-receipt>キャンセル</button>
-        <button class="primary-button" id="analyzeReceiptButton" type="button">AIで読み取る</button>
+        <button class="primary-button" id="analyzeReceiptButton" type="button">この写真をAIで読み取る</button>
       </div>
     </div>
   </dialog>
@@ -360,6 +364,24 @@
 
 
 
+  <nav class="bottom-nav" aria-label="メインメニュー">
+    <button id="navHomeButton" type="button">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m4 11 8-7 8 7v9h-6v-6h-4v6H4Z"/></svg>
+      <span>ホーム</span>
+    </button>
+    <button id="navReceiptButton" type="button">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h3l1.4-2h7.2L17 7h3v12H4Z"/><circle cx="12" cy="13" r="3.5"/></svg>
+      <span>撮影</span>
+    </button>
+    <button class="nav-add" id="navAddButton" type="button" aria-label="医療費を入力">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+      <span>入力</span>
+    </button>
+    <button id="navSettingsButton" type="button">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06-2.86 2.86-.06-.06A1.7 1.7 0 0 0 15 19.4a1.7 1.7 0 0 0-1 .6 1.7 1.7 0 0 0-.4 1.1V21H9.55v-.09A1.7 1.7 0 0 0 8.5 19.4a1.7 1.7 0 0 0-1.88.34l-.06.06-2.86-2.86.06-.06A1.7 1.7 0 0 0 4.1 15a1.7 1.7 0 0 0-.6-1 1.7 1.7 0 0 0-1.1-.4H2.3V9.55h.1A1.7 1.7 0 0 0 4.1 8.5a1.7 1.7 0 0 0-.34-1.88l-.06-.06L6.56 3.7l.06.06A1.7 1.7 0 0 0 8.5 4.1a1.7 1.7 0 0 0 1-.6 1.7 1.7 0 0 0 .4-1.1V2.3h4.05v.1A1.7 1.7 0 0 0 15 4.1a1.7 1.7 0 0 0 1.88-.34l.06-.06 2.86 2.86-.06.06A1.7 1.7 0 0 0 19.4 8.5a1.7 1.7 0 0 0 .6 1 1.7 1.7 0 0 0 1.1.4h.1v4.05h-.1A1.7 1.7 0 0 0 19.4 15Z"/></svg>
+      <span>設定</span>
+    </button>
+  </nav>
 
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
 

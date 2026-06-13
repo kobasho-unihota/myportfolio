@@ -10,8 +10,10 @@ import {
   collection,
   deleteDoc,
   doc,
-  getFirestore,
+  initializeFirestore,
   onSnapshot,
+  persistentLocalCache,
+  persistentMultipleTabManager,
   setDoc,
   writeBatch,
 } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-firestore.js";
@@ -27,7 +29,11 @@ const firebaseConfig = {
 
 const app = initializeApp(firebaseConfig, "medipass");
 const auth = getAuth(app);
-const db = getFirestore(app);
+const db = initializeFirestore(app, {
+  localCache: persistentLocalCache({
+    tabManager: persistentMultipleTabManager(),
+  }),
+});
 const provider = new GoogleAuthProvider();
 let unsubscribeRecords = null;
 let unsubscribeSettings = null;
@@ -80,10 +86,18 @@ export const cloudSync = {
     ensureUser();
     await commitOperations(records.map((record) => ({ type: "delete", id: record.id })));
   },
+  async retry() {
+    ensureUser();
+    startListeners(currentUser);
+  },
 };
 
 onAuthStateChanged(auth, (user) => {
   currentUser = user;
+  startListeners(user);
+});
+
+function startListeners(user) {
   stopListeners();
   records = [];
   settings = { incomesByYear: {} };
@@ -98,13 +112,13 @@ onAuthStateChanged(auth, (user) => {
     records = snapshot.docs.map((item) => item.data());
     recordsLoaded = true;
     emit(recordsLoaded && settingsLoaded ? "synced" : "syncing");
-  }, () => emit("error"));
+  }, (error) => emit("error", error));
   unsubscribeSettings = onSnapshot(settingsRef(), (snapshot) => {
     settings = snapshot.exists() ? snapshot.data() : { incomesByYear: {} };
     settingsLoaded = true;
     emit(recordsLoaded && settingsLoaded ? "synced" : "syncing");
-  }, () => emit("error"));
-});
+  }, (error) => emit("error", error));
+}
 
 function recordsRef() {
   return collection(db, "users", currentUser.uid, "medicalExpense", "records", "items");
@@ -137,10 +151,14 @@ async function commitOperations(operations) {
   }
 }
 
-function emit(status) {
+function emit(status, error = null) {
   listener({
     status,
     user: currentUser,
     state: { version: 1, records, settings },
+    error: error ? {
+      code: String(error.code || ""),
+      message: String(error.message || ""),
+    } : null,
   });
 }

@@ -1,16 +1,39 @@
 {
   "name": "Medipass 医療費記録",
   "short_name": "Medipass",
+  "id": "./",
   "start_url": "./",
+  "scope": "./",
   "display": "standalone",
+  "display_override": ["standalone", "minimal-ui"],
   "background_color": "#f4f7f5",
   "theme_color": "#f4f7f5",
+  "orientation": "portrait-primary",
+  "categories": ["health", "finance", "productivity"],
   "icons": [
     {
-      "src": "./icon.svg",
-      "sizes": "any",
-      "type": "image/svg+xml",
+      "src": "./icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "./icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
       "purpose": "any maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "領収書を撮る",
+      "short_name": "撮影",
+      "url": "./?action=scan"
+    },
+    {
+      "name": "医療費を入力",
+      "short_name": "入力",
+      "url": "./?action=add"
     }
   ]
 }
