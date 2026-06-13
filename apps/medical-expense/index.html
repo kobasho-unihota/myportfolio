@@ -5,10 +5,31 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#f4f7f5">
   <meta name="description" content="領収書のAI読み取りにも対応した、家族の医療費を日々記録・集計するWebアプリ。">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="Medipass">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="format-detection" content="telephone=no">
   <title>Medipass | 医療費記録</title>
   <link rel="manifest" href="./site.webmanifest">
   <link rel="icon" href="./icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="./apple-touch-icon.png">
   <link rel="stylesheet" href="./styles.css">
+
+  <style>
+    .receipt-preview-batch{display:grid;gap:14px}
+    .receipt-preview-header{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+    .receipt-preview-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+    .receipt-preview-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(112px,1fr));gap:10px}
+    .receipt-preview-item{position:relative;border:1px solid rgba(37,55,45,.14);border-radius:16px;overflow:hidden;background:#fff}
+    .receipt-preview-item img{width:100%;aspect-ratio:3/4;object-fit:cover;display:block}
+    .receipt-preview-item small{display:block;padding:8px;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .receipt-preview-index{position:absolute;top:8px;left:8px;min-width:24px;height:24px;border-radius:999px;background:rgba(0,0,0,.62);color:#fff;display:grid;place-items:center;font-size:12px;font-weight:700}
+    .receipt-batch-results{margin-top:12px;padding:14px;border:1px solid rgba(37,55,45,.12);border-radius:18px;background:rgba(255,255,255,.7)}
+    .receipt-batch-result-list{display:grid;gap:10px;margin-top:12px}
+    .receipt-batch-result{padding:12px;border-radius:14px;background:#fff;border:1px solid rgba(37,55,45,.1)}
+    .receipt-batch-result strong{display:block;margin-bottom:4px}
+  </style>
 </head>
 <body>
   <div class="app-shell">
@@ -38,6 +59,11 @@
     </header>
 
     <main>
+      <section class="connection-banner" id="connectionBanner" hidden aria-live="polite">
+        <span></span>
+        <p id="connectionMessage"></p>
+        <button id="retrySyncButton" type="button">再試行</button>
+      </section>
       <section class="hero">
         <div>
           <p class="eyebrow" id="todayLabel"></p>
@@ -47,7 +73,7 @@
         <div class="hero-actions">
           <button class="secondary-button hero-button" id="openReceiptButton" type="button">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h3l1.4-2h7.2L17 7h3v12H4Z"/><circle cx="12" cy="13" r="3.5"/></svg>
-            領収書を撮る
+            領収書をまとめて読む
           </button>
           <button class="primary-button hero-button" id="openEntryButton" type="button">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
@@ -151,7 +177,7 @@
       </div>
       <button class="receipt-inline-button" id="entryReceiptButton" type="button">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h3l1.4-2h7.2L17 7h3v12H4Z"/><circle cx="12" cy="13" r="3.5"/></svg>
-        領収書をAIで読み取る
+        複数の領収書をAIで読み取る
       </button>
       <input id="recordId" type="hidden">
       <div class="form-grid">
@@ -238,6 +264,7 @@
       </div>
       <button class="secondary-button" id="syncActionButton" type="button">Googleでログイン</button>
     </section>
+    <p class="auth-note">認証と同期には既存のFirebaseプロジェクト「SeedNote」を使用しています。Googleの認証画面にSeedNoteと表示されますが、Medipassのデータは専用領域へ分けて保存されます。</p>
     <label class="field">
       <span>Gemini APIキー（AI読み取り用）</span>
       <input id="geminiApiKey" type="password" autocomplete="off" placeholder="AIzaSy...">
@@ -272,36 +299,114 @@
         </div>
         <button class="icon-button close-button" type="button" data-close-receipt aria-label="閉じる">×</button>
       </div>
-      <p class="receipt-lead">領収書を撮影または選択すると、支払日・病院名・金額をAIが下書きします。保存前に必ず内容を確認してください。</p>
+      <p class="receipt-lead">複数の領収書写真をまとめて選択すると、AIが1枚ずつ解析して記録候補を作成します。保存前に必ず内容を確認してください。</p>
       <label class="receipt-picker" id="receiptPicker">
-        <input id="receiptImageInput" type="file" accept="image/*" capture="environment">
+        <input id="receiptImageInput" type="file" accept="image/*" multiple>
         <span class="receipt-picker-icon">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h3l1.4-2h7.2L17 7h3v12H4Z"/><circle cx="12" cy="13" r="3.5"/></svg>
         </span>
-        <strong>領収書を撮影・選択</strong>
-        <small>JPEG・PNG・HEICなど、10MBまで</small>
+        <strong>領収書写真をまとめて選択</strong>
+        <small>JPEG・PNG・HEICなど、1枚10MBまで／複数選択可</small>
       </label>
-      <div class="receipt-preview" id="receiptPreview" hidden>
-        <img id="receiptPreviewImage" alt="選択した領収書のプレビュー">
-        <button class="secondary-button" id="changeReceiptButton" type="button">写真を選び直す</button>
+      <div class="receipt-preview receipt-preview-batch" id="receiptPreview" hidden>
+        <div class="receipt-preview-header">
+          <strong id="selectedReceiptCount">0枚選択中</strong>
+          <div class="receipt-preview-actions">
+            <button class="secondary-button" id="changeReceiptButton" type="button">写真を追加・選び直す</button>
+            <button class="text-button" id="clearReceiptButton" type="button">選択をクリア</button>
+          </div>
+        </div>
+        <div class="receipt-preview-list" id="receiptPreviewList" aria-label="選択した領収書写真の一覧"></div>
+        <img id="receiptPreviewImage" alt="選択した領収書のプレビュー" hidden>
       </div>
       <label class="consent-field">
         <input id="receiptConsent" type="checkbox">
-        <span><strong>画像をGoogle Gemini APIへ送信することに同意します</strong><small>画像には氏名や医療情報が含まれる場合があります。画像はMedipassには保存しません。</small></span>
+        <span><strong>選択した画像をGoogle Gemini APIへ送信することに同意します</strong><small>画像には氏名や医療情報が含まれる場合があります。選択した画像はMedipassには保存しません。</small></span>
       </label>
       <p class="form-error" id="receiptError" role="alert"></p>
       <div class="receipt-progress" id="receiptProgress" hidden>
         <span class="receipt-spinner" aria-hidden="true"></span>
-        <div><strong>領収書を読み取っています</strong><small>通常は数秒から30秒ほどかかります。</small></div>
+        <div><strong id="receiptProgressTitle">領収書を読み取っています</strong><small id="receiptProgressDetail">複数枚の場合は1枚ずつ解析します。</small></div>
+      </div>
+      <div class="receipt-batch-results" id="receiptBatchResults" hidden aria-live="polite">
+        <div class="receipt-preview-header">
+          <strong>解析結果</strong>
+          <small id="receiptBatchSummary">0件の候補</small>
+        </div>
+        <div id="receiptBatchResultList" class="receipt-batch-result-list"></div>
       </div>
       <div class="dialog-actions">
         <button class="secondary-button" type="button" data-close-receipt>キャンセル</button>
-        <button class="primary-button" id="analyzeReceiptButton" type="button">AIで読み取る</button>
+        <button class="primary-button" id="analyzeReceiptButton" type="button">まとめてAI解析</button>
       </div>
     </div>
   </dialog>
 
+  <nav class="bottom-nav" aria-label="メインメニュー">
+    <button id="navHomeButton" type="button">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m4 11 8-7 8 7v9h-6v-6h-4v6H4Z"/></svg>
+      <span>ホーム</span>
+    </button>
+    <button id="navReceiptButton" type="button">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h3l1.4-2h7.2L17 7h3v12H4Z"/><circle cx="12" cy="13" r="3.5"/></svg>
+      <span>撮影</span>
+    </button>
+    <button class="nav-add" id="navAddButton" type="button" aria-label="医療費を入力">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+      <span>入力</span>
+    </button>
+    <button id="navSettingsButton" type="button">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06-2.86 2.86-.06-.06A1.7 1.7 0 0 0 15 19.4a1.7 1.7 0 0 0-1 .6 1.7 1.7 0 0 0-.4 1.1V21H9.55v-.09A1.7 1.7 0 0 0 8.5 19.4a1.7 1.7 0 0 0-1.88.34l-.06.06-2.86-2.86.06-.06A1.7 1.7 0 0 0 4.1 15a1.7 1.7 0 0 0-.6-1 1.7 1.7 0 0 0-1.1-.4H2.3V9.55h.1A1.7 1.7 0 0 0 4.1 8.5a1.7 1.7 0 0 0-.34-1.88l-.06-.06L6.56 3.7l.06.06A1.7 1.7 0 0 0 8.5 4.1a1.7 1.7 0 0 0 1-.6 1.7 1.7 0 0 0 .4-1.1V2.3h4.05v.1A1.7 1.7 0 0 0 15 4.1a1.7 1.7 0 0 0 1.88-.34l.06-.06 2.86 2.86-.06.06A1.7 1.7 0 0 0 19.4 8.5a1.7 1.7 0 0 0 .6 1 1.7 1.7 0 0 0 1.1.4h.1v4.05h-.1A1.7 1.7 0 0 0 19.4 15Z"/></svg>
+      <span>設定</span>
+    </button>
+  </nav>
+
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+  <script>
+    (() => {
+      const input = document.getElementById('receiptImageInput');
+      const preview = document.getElementById('receiptPreview');
+      const list = document.getElementById('receiptPreviewList');
+      const count = document.getElementById('selectedReceiptCount');
+      const clear = document.getElementById('clearReceiptButton');
+      const change = document.getElementById('changeReceiptButton');
+      const legacyImage = document.getElementById('receiptPreviewImage');
+      if (!input || !preview || !list || !count) return;
+
+      const renderSelectedReceipts = () => {
+        const files = Array.from(input.files || []);
+        list.innerHTML = '';
+        preview.hidden = files.length === 0;
+        count.textContent = `${files.length}枚選択中`;
+        if (legacyImage) {
+          legacyImage.hidden = true;
+          legacyImage.removeAttribute('src');
+        }
+        files.forEach((file, index) => {
+          const url = URL.createObjectURL(file);
+          const item = document.createElement('div');
+          item.className = 'receipt-preview-item';
+          item.innerHTML = `
+            <span class="receipt-preview-index">${index + 1}</span>
+            <img alt="選択した領収書 ${index + 1}枚目">
+            <small title="${file.name}">${file.name}</small>
+          `;
+          const img = item.querySelector('img');
+          img.src = url;
+          img.addEventListener('load', () => URL.revokeObjectURL(url), { once: true });
+          list.appendChild(item);
+        });
+      };
+
+      input.addEventListener('change', renderSelectedReceipts);
+      change?.addEventListener('click', () => input.click());
+      clear?.addEventListener('click', () => {
+        input.value = '';
+        renderSelectedReceipts();
+      });
+    })();
+  </script>
   <script type="module" src="./app.mjs"></script>
 </body>
 </html>
