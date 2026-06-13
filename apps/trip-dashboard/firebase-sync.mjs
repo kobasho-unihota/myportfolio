@@ -15,6 +15,7 @@ import {
   persistentLocalCache,
   persistentMultipleTabManager,
   setDoc,
+  writeBatch,
 } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-firestore.js";
 
 const firebaseConfig = {
@@ -80,6 +81,50 @@ export const cloudSync = {
     ensureUser();
     await setDoc(settingsRef(), next, { merge: true });
   },
+  async resetHiddenBookings() {
+    ensureUser();
+    const hiddenBookings = bookings.filter((booking) => booking.hidden);
+    for (let index = 0; index < hiddenBookings.length; index += 400) {
+      const batch = writeBatch(db);
+      hiddenBookings.slice(index, index + 400).forEach((booking) => {
+        batch.set(doc(bookingsRef(), booking.id), {
+          hidden: false,
+          updatedAt: new Date().toISOString(),
+        }, { merge: true });
+      });
+      await batch.commit();
+    }
+    return hiddenBookings.length;
+  },
+  async replaceHotelBookings(nextHotels) {
+    ensureUser();
+    const nextIds = new Set(nextHotels.map((booking) => booking.id));
+    const operations = [
+      ...bookings
+        .filter((booking) => booking.type === "hotel" && booking.provider === "楽天トラベル" && !nextIds.has(booking.id))
+        .map((booking) => ({ type: "delete", id: booking.id })),
+      ...nextHotels.map((booking) => {
+        const current = bookings.find((item) => item.id === booking.id);
+        return {
+          type: "set",
+          booking: {
+            ...booking,
+            overrides: current?.overrides || booking.overrides || {},
+            hidden: current?.hidden || false,
+          },
+        };
+      }),
+    ];
+    for (let index = 0; index < operations.length; index += 400) {
+      const batch = writeBatch(db);
+      operations.slice(index, index + 400).forEach((operation) => {
+        const target = doc(bookingsRef(), operation.id || operation.booking.id);
+        if (operation.type === "delete") batch.delete(target);
+        else batch.set(target, operation.booking);
+      });
+      await batch.commit();
+    }
+  },
 };
 
 onAuthStateChanged(auth, (user) => {
@@ -131,4 +176,3 @@ function emit(status, error = null) {
     error: error ? { code: String(error.code || ""), message: String(error.message || error) } : null,
   });
 }
-

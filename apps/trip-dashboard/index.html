@@ -10,10 +10,10 @@
   <meta name="apple-mobile-web-app-title" content="TripBoard">
   <meta name="format-detection" content="telephone=no">
   <title>TripBoard | 出張予約</title>
-  <link rel="manifest" href="./site.webmanifest?v=2">
+  <link rel="manifest" href="./site.webmanifest?v=4">
   <link rel="icon" href="./icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="./apple-touch-icon.png">
-  <link rel="stylesheet" href="./styles.css?v=2">
+  <link rel="stylesheet" href="./styles.css?v=4">
 </head>
 <body>
   <div class="app-shell">
@@ -69,6 +69,8 @@
         <h1>予約メールを更新</h1>
         <p>JAL国内線と楽天トラベルのメールを読み込みます。メール本文やアクセストークンは保存しません。</p>
         <button class="primary-button sync-main-button" id="syncNowButton" type="button">Gmailから更新する</button>
+        <button class="secondary-button sync-main-button" id="rescanHotelsButton" type="button">ホテルを完全再取得</button>
+        <p class="sync-note">削除したホテルが戻らない場合や、予約・取消を整理し直す場合に使用します。過去2年の楽天トラベルメールを予約番号ごとに再集計します。</p>
         <div class="progress-card" id="syncProgress" hidden>
           <strong id="syncProgressTitle">メールを検索中</strong>
           <div><span id="syncProgressBar"></span></div>
@@ -88,6 +90,11 @@
           <strong id="accountSettingsTitle">Googleアカウント</strong>
           <p id="accountSettingsCopy">ログインすると、予約と手修正内容をiPhone・PC間で同期できます。</p>
           <button class="secondary-button" id="accountSettingsButton" type="button">Googleでログイン</button>
+        </section>
+        <section class="settings-card">
+          <strong>非表示の予約</strong>
+          <p>非表示ボタンを押した予約をすべて再表示します。予約内容や取消状態は変更しません。</p>
+          <button class="secondary-button" id="resetHiddenButton" type="button">非表示をすべて解除</button>
         </section>
         <section class="privacy-card">
           <strong>プライバシー</strong>
@@ -135,6 +142,6 @@
   </dialog>
 
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
-  <script type="module" src="./app.mjs?v=2"></script>
+  <script type="module" src="./app.mjs?v=4"></script>
 </body>
 </html>

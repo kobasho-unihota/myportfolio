@@ -169,6 +169,8 @@ h2 { margin-bottom: 0; font-size: 25px; }
 .sync-orbit.running .orbit-plane { transform-origin: 15px 76px; animation: orbit 1.4s linear infinite; }
 @keyframes orbit { to { transform: rotate(360deg); } }
 .sync-main-button { min-width: 230px; }
+.sync-main-button + .sync-main-button { display: block; margin: 10px auto 0; }
+.sync-note { max-width: 520px !important; margin: 10px auto 0 !important; font-size: 11px !important; }
 .progress-card { max-width: 410px; margin: 18px auto; padding: 16px; border: 1px solid var(--line); border-radius: 16px; background: #fff; text-align: left; }
 .progress-card strong { font-size: 12px; }
 .progress-card > div { height: 5px; margin: 11px 0 7px; overflow: hidden; border-radius: 5px; background: #e8edf2; }
@@ -242,4 +244,3 @@ h2 { margin-bottom: 0; font-size: 25px; }
 @media (display-mode: standalone) {
   .topbar { padding-top: env(safe-area-inset-top); min-height: calc(66px + env(safe-area-inset-top)); }
 }
-

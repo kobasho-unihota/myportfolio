@@ -1,6 +1,6 @@
-import { bookingWarnings, effectiveBooking, gmailQuery, groupTrips, mergeBookings, parseTravelEmail } from "./core.mjs?v=2";
-import { fetchTravelMessages } from "./gmail.mjs?v=2";
-import { cloudSync } from "./firebase-sync.mjs?v=2";
+import { bookingWarnings, effectiveBooking, gmailQuery, groupTrips, hotelRescanQuery, mergeBookings, parseTravelEmail } from "./core.mjs?v=4";
+import { fetchTravelMessages } from "./gmail.mjs?v=4";
+import { cloudSync } from "./firebase-sync.mjs?v=4";
 
 const state = {
   user: null,
@@ -42,12 +42,14 @@ document.querySelectorAll("[data-close]").forEach((button) => button.addEventLis
 
 elements.heroSyncButton.addEventListener("click", () => showView("sync"));
 elements.syncNowButton.addEventListener("click", syncGmail);
+elements.rescanHotelsButton.addEventListener("click", rescanHotels);
 elements.accountButton.addEventListener("click", handleAccount);
 elements.accountSettingsButton.addEventListener("click", handleAccount);
 elements.addBookingButton.addEventListener("click", () => openBookingDialog());
 elements.bookingType.addEventListener("change", updateBookingFields);
 elements.bookingForm.addEventListener("submit", saveBooking);
 elements.saveSettingsButton.addEventListener("click", saveSettings);
+elements.resetHiddenButton.addEventListener("click", resetHiddenBookings);
 elements.bookingList.addEventListener("click", handleBookingAction);
 
 elements.todayLabel.textContent = new Intl.DateTimeFormat("ja-JP", {
@@ -86,6 +88,27 @@ async function syncGmail() {
   }
 }
 
+async function rescanHotels() {
+  try {
+    setSyncing(true, true);
+    const token = await cloudSync.authorizeGmail();
+    const messages = await fetchTravelMessages(token, hotelRescanQuery(), updateProgress);
+    const parsed = messages.map(parseTravelEmail).filter((booking) => booking?.type === "hotel");
+    const rebuilt = mergeBookings([], parsed);
+    updateProgress({ phase: "save", current: 0, total: rebuilt.length });
+    await cloudSync.replaceHotelBookings(rebuilt);
+    updateProgress({ phase: "save", current: rebuilt.length, total: rebuilt.length });
+    await cloudSync.saveSettings({ ...state.settings, lastSyncedAt: new Date().toISOString() });
+    const active = rebuilt.filter((booking) => booking.status !== "cancelled").length;
+    showToast(`ホテル${active}件を復元、取消${rebuilt.length - active}件を反映しました`);
+    showView("bookings");
+  } catch (error) {
+    showToast(error.status === 401 ? "認証期限が切れました。もう一度実行してください。" : readableError(error));
+  } finally {
+    setSyncing(false, true);
+  }
+}
+
 function updateProgress(progress) {
   const labels = { search: "予約メールを検索中", read: "メール本文を確認中", save: "予約を保存中" };
   elements.syncProgressTitle.textContent = labels[progress.phase] || "更新中";
@@ -94,9 +117,11 @@ function updateProgress(progress) {
   elements.syncProgressText.textContent = progress.total ? `${progress.current} / ${progress.total}件` : `${progress.current}件見つかりました`;
 }
 
-function setSyncing(active) {
+function setSyncing(active, hotelRescan = false) {
   elements.syncNowButton.disabled = active;
+  elements.rescanHotelsButton.disabled = active;
   elements.syncNowButton.textContent = active ? "更新しています..." : "Gmailから更新する";
+  elements.rescanHotelsButton.textContent = active && hotelRescan ? "ホテルを再構築しています..." : "ホテルを完全再取得";
   elements.syncProgress.hidden = !active;
   document.querySelector(".sync-orbit").classList.toggle("running", active);
 }
@@ -289,6 +314,25 @@ async function saveSettings() {
   if (!homeAirport) return showToast("自宅空港を入力してください");
   await cloudSync.saveSettings({ ...state.settings, homeAirport });
   showToast("設定を保存しました");
+}
+
+async function resetHiddenBookings() {
+  if (!state.user) {
+    showToast("先にGoogleでログインしてください");
+    return;
+  }
+  elements.resetHiddenButton.disabled = true;
+  elements.resetHiddenButton.textContent = "再表示しています...";
+  try {
+    const count = await cloudSync.resetHiddenBookings();
+    showToast(count ? `${count}件の予約を再表示しました` : "非表示の予約はありません");
+    if (count) showView("bookings");
+  } catch (error) {
+    showToast(readableError(error));
+  } finally {
+    elements.resetHiddenButton.disabled = false;
+    elements.resetHiddenButton.textContent = "非表示をすべて解除";
+  }
 }
 
 function updateAuthUI(error) {

@@ -44,7 +44,9 @@ export function mergeBookings(existing, incoming) {
     merged.set(booking.id, {
       ...current,
       provider: booking.provider || current.provider,
-      status: incoming.status === "cancelled" ? "cancelled" : incomingIsNewer ? booking.status : current.status,
+      status: current.status === "cancelled" || booking.status === "cancelled"
+        ? "cancelled"
+        : incomingIsNewer ? booking.status : current.status,
       parsed: incomingIsNewer
         ? { ...current.parsed, ...removeEmpty(booking.parsed) }
         : { ...booking.parsed, ...removeEmpty(current.parsed) },
@@ -129,6 +131,10 @@ export function gmailQuery(lastSyncedAt) {
   return `after:${date} {from:jal.com from:skyinfo.jal.com from:travel@mail.travel.rakuten.co.jp from:mail.travel.rakuten.co.jp subject:"JAL国内線" subject:"楽天トラベル"} -in:trash -in:spam`;
 }
 
+export function hotelRescanQuery() {
+  return `newer_than:2y from:travel@mail.travel.rakuten.co.jp {subject:"予約完了メール" subject:"予約確認メール" subject:"キャンセル確認メール"} -in:trash -in:spam`;
+}
+
 function parseJal({ subject, body, source }) {
   const reservationNumber = match(body, /予約番号\s*[:：]?\s*([A-Z0-9]{6,})/i);
   const flightNumber = normalizeFlightNumber(
@@ -196,7 +202,7 @@ function parseRakuten({ subject, body, source }) {
   const checkOutText = match(body, /チェックアウト(?:日)?\s*\n?\s*((?:20\d{2})[-/]\d{1,2}[-/]\d{1,2})/);
   const roomType = match(body, /部屋タイプ\s*\n?\s*([^\n]+)/);
   const plan = match(body, /(?:宿泊プラン|宿泊プラン名)\s*\n?\s*(?:\[)?([^\]\n]+?)(?:\]\([^)]+\))?\s*\n/);
-  const amount = Number((lastMatch(body, /(?:差引支払額\s*消費税込:?\s*|総合計\s*(?:消費税込:)?\s*)([\d,]+)円/gi) || "0").replace(/,/g, ""));
+  const amount = Number((lastMatch(body, /(?:差引支払額(?:\s*消費税込)?\s*:?\s*|総合計\s*(?:消費税込:)?\s*)([\d,]+)\s*円/gi) || "0").replace(/,/g, ""));
   const breakfast = /朝食[:：].*あり|朝食付/.test(body);
   const managementLink = firstLink(body, /予約確認ページ|予約の詳細確認|変更、キャンセル/i);
   return {
