@@ -8,15 +8,20 @@ import {
   normalizeState,
   toCsv,
 } from "./core.mjs";
+import {
+  GEMINI_KEY_STORAGE,
+  analyzeReceipt,
+  prepareImage,
+} from "./ai-receipt.mjs";
 
 const $ = (selector) => document.querySelector(selector);
 const yen = new Intl.NumberFormat("ja-JP", { style: "currency", currency: "JPY", maximumFractionDigits: 0 });
-const dateFormat = new Intl.DateTimeFormat("ja-JP", { month: "short", day: "numeric", weekday: "short" });
 const currentYear = new Date().getFullYear();
 let selectedYear = currentYear;
 let state = loadState();
 let syncStatus = "loading";
 let cloudInitialized = false;
+let preparedReceiptImage = null;
 let cloudSync = {
   user: null,
   signIn: async () => { throw new Error("同期機能を利用できません。"); },
@@ -32,6 +37,7 @@ const elements = {
   searchInput: $("#searchInput"),
   entryDialog: $("#entryDialog"),
   dataDialog: $("#dataDialog"),
+  receiptDialog: $("#receiptDialog"),
   entryForm: $("#entryForm"),
   toast: $("#toast"),
 };
@@ -52,6 +58,9 @@ function bindEvents() {
   ["#openEntryButton", "#desktopEntryButton", "#floatingEntryButton"].forEach((selector) => {
     $(selector).addEventListener("click", () => openEntryDialog());
   });
+  ["#openReceiptButton", "#entryReceiptButton"].forEach((selector) => {
+    $(selector).addEventListener("click", openReceiptDialog);
+  });
   $("#settingsButton").addEventListener("click", openDataDialog);
   $("#accountButton").addEventListener("click", handleAccountAction);
   $("#incomeButton").addEventListener("click", openDataDialog);
@@ -60,6 +69,9 @@ function bindEvents() {
   );
   document.querySelectorAll("[data-close-data]").forEach((button) =>
     button.addEventListener("click", () => elements.dataDialog.close())
+  );
+  document.querySelectorAll("[data-close-receipt]").forEach((button) =>
+    button.addEventListener("click", () => elements.receiptDialog.close())
   );
   elements.entryForm.addEventListener("submit", saveRecord);
   elements.entryForm.addEventListener("input", (event) => {
@@ -81,7 +93,10 @@ function bindEvents() {
   $("#exportJsonButton").addEventListener("click", exportJson);
   $("#importJsonInput").addEventListener("change", importJson);
   $("#deleteAllButton").addEventListener("click", deleteAll);
-  [elements.entryDialog, elements.dataDialog].forEach((dialog) => {
+  $("#receiptImageInput").addEventListener("change", handleReceiptImage);
+  $("#changeReceiptButton").addEventListener("click", () => $("#receiptImageInput").click());
+  $("#analyzeReceiptButton").addEventListener("click", handleReceiptAnalysis);
+  [elements.entryDialog, elements.dataDialog, elements.receiptDialog].forEach((dialog) => {
     dialog.addEventListener("click", (event) => {
       if (event.target === dialog) dialog.close();
     });
@@ -220,6 +235,87 @@ function openEntryDialog(record = null) {
   window.setTimeout(() => $("#providerName").focus(), 50);
 }
 
+function openReceiptDialog() {
+  if (elements.entryDialog.open) elements.entryDialog.close();
+  preparedReceiptImage = null;
+  $("#receiptImageInput").value = "";
+  $("#receiptConsent").checked = false;
+  $("#receiptError").textContent = "";
+  $("#receiptPreview").hidden = true;
+  $("#receiptPicker").hidden = false;
+  $("#receiptProgress").hidden = true;
+  $("#analyzeReceiptButton").disabled = false;
+  elements.receiptDialog.showModal();
+}
+
+async function handleReceiptImage(event) {
+  const file = event.target.files?.[0];
+  if (!file) return;
+  $("#receiptError").textContent = "";
+  try {
+    preparedReceiptImage = await prepareImage(file);
+    $("#receiptPreviewImage").src = preparedReceiptImage.dataUrl;
+    $("#receiptPicker").hidden = true;
+    $("#receiptPreview").hidden = false;
+  } catch (error) {
+    preparedReceiptImage = null;
+    $("#receiptError").textContent = error.message === "IMAGE_TOO_LARGE"
+      ? "画像は10MB以下で選択してください。"
+      : "この画像を読み込めませんでした。JPEGまたはPNGでお試しください。";
+  }
+}
+
+async function handleReceiptAnalysis() {
+  const apiKey = localStorage.getItem(GEMINI_KEY_STORAGE) || "";
+  if (!apiKey) {
+    $("#receiptError").textContent = "先にデータ管理からGemini APIキーを設定してください。";
+    return;
+  }
+  if (!preparedReceiptImage) {
+    $("#receiptError").textContent = "領収書の写真を選択してください。";
+    return;
+  }
+  if (!$("#receiptConsent").checked) {
+    $("#receiptError").textContent = "画像の送信に同意してから読み取ってください。";
+    $("#receiptConsent").focus();
+    return;
+  }
+  $("#receiptError").textContent = "";
+  $("#receiptProgress").hidden = false;
+  $("#analyzeReceiptButton").disabled = true;
+  try {
+    const result = await analyzeReceipt({ apiKey, image: preparedReceiptImage });
+    elements.receiptDialog.close();
+    openEntryDialog();
+    if (result.paidDate) $("#paidDate").value = result.paidDate;
+    $("#providerName").value = result.providerName;
+    $("#amount").value = String(result.amount);
+    $("#category").value = result.category;
+    $("#paymentMethod").value = result.paymentMethod;
+    $("#receiptStatus").value = "保管済み";
+    const notes = [
+      result.memo,
+      result.warnings.length ? `AI確認事項: ${result.warnings.join(" / ")}` : "",
+      `AI読取信頼度: ${Math.round(result.confidence * 100)}%`,
+    ].filter(Boolean);
+    $("#memo").value = notes.join("\n").slice(0, 300);
+    $("#formError").textContent = "AIが入力した内容です。領収書と照合してから保存してください。";
+    $("#providerName").focus();
+    showToast("領収書から下書きを作成しました");
+  } catch (error) {
+    const messages = {
+      INVALID_API_KEY: "Gemini APIキーが正しくありません。",
+      MODEL_UNAVAILABLE: "AIが混み合っています。しばらくしてから再度お試しください。",
+      INVALID_RESULT: "領収書の内容を十分に読み取れませんでした。明るい場所で撮り直してください。",
+      EMPTY_RESULT: "AIから結果を受け取れませんでした。",
+    };
+    $("#receiptError").textContent = messages[error.message] || "AI読み取りに失敗しました。通信状態を確認してください。";
+  } finally {
+    $("#receiptProgress").hidden = true;
+    $("#analyzeReceiptButton").disabled = false;
+  }
+}
+
 async function saveRecord(event) {
   event.preventDefault();
   const requiredFields = [$("#paidDate"), $("#personName"), $("#providerName"), $("#amount")];
@@ -308,6 +404,7 @@ async function handleRecordAction(event) {
 function openDataDialog() {
   $("#incomeYearLabel").textContent = String(selectedYear);
   $("#incomeAmount").value = state.settings.incomesByYear[String(selectedYear)] ?? "";
+  $("#geminiApiKey").value = localStorage.getItem(GEMINI_KEY_STORAGE) || "";
   renderSyncUi();
   elements.dataDialog.showModal();
 }
@@ -332,6 +429,9 @@ async function saveSettings() {
     }
   }
   state.settings = nextSettings;
+  const apiKey = $("#geminiApiKey").value.trim();
+  if (apiKey) localStorage.setItem(GEMINI_KEY_STORAGE, apiKey);
+  else localStorage.removeItem(GEMINI_KEY_STORAGE);
   persist();
   elements.dataDialog.close();
   renderSummary();

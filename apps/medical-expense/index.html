@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#f4f7f5">
-  <meta name="description" content="医療費控除に向けて、家族の医療費と領収書を日々記録・集計する端末内保存のWebアプリ。">
+  <meta name="description" content="領収書のAI読み取りにも対応した、家族の医療費を日々記録・集計するWebアプリ。">
   <title>Medipass | 医療費記録</title>
   <link rel="manifest" href="./site.webmanifest">
   <link rel="icon" href="./icon.svg" type="image/svg+xml">
@@ -44,10 +44,16 @@
           <h1>今年の医療費を、<br><span>迷わず整える。</span></h1>
           <p class="hero-copy">通院した日に記録して、確定申告の準備を少しずつ。GoogleログインでPCとスマホの記録を同期できます。</p>
         </div>
-        <button class="primary-button hero-button" id="openEntryButton" type="button">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
-          医療費を記録
-        </button>
+        <div class="hero-actions">
+          <button class="secondary-button hero-button" id="openReceiptButton" type="button">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h3l1.4-2h7.2L17 7h3v12H4Z"/><circle cx="12" cy="13" r="3.5"/></svg>
+            領収書を撮る
+          </button>
+          <button class="primary-button hero-button" id="openEntryButton" type="button">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+            手入力する
+          </button>
+        </div>
       </section>
 
       <section class="summary-grid" aria-label="年間サマリー">
@@ -143,6 +149,10 @@
         </div>
         <button class="icon-button close-button" type="button" data-close-dialog aria-label="閉じる">×</button>
       </div>
+      <button class="receipt-inline-button" id="entryReceiptButton" type="button">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h3l1.4-2h7.2L17 7h3v12H4Z"/><circle cx="12" cy="13" r="3.5"/></svg>
+        領収書をAIで読み取る
+      </button>
       <input id="recordId" type="hidden">
       <div class="form-grid">
         <label class="field">
@@ -229,6 +239,11 @@
       <button class="secondary-button" id="syncActionButton" type="button">Googleでログイン</button>
     </section>
     <label class="field">
+      <span>Gemini APIキー（AI読み取り用）</span>
+      <input id="geminiApiKey" type="password" autocomplete="off" placeholder="AIzaSy...">
+      <small>この端末のブラウザ内だけに保存します。<a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noreferrer">Google AI Studioで取得</a></small>
+    </label>
+    <label class="field">
       <span><b id="incomeYearLabel"></b>年分の総所得金額等（概算用）</span>
       <div class="money-input"><span>¥</span><input id="incomeAmount" type="number" inputmode="numeric" min="0" step="1" placeholder="未設定"></div>
       <small>200万円未満の場合、控除額計算の基準は所得の5%になります。</small>
@@ -245,6 +260,44 @@
     <button class="danger-button" id="deleteAllButton" type="button">すべての記録を削除</button>
     <div class="dialog-actions">
       <button class="primary-button" id="saveSettingsButton" type="button">設定を保存</button>
+    </div>
+  </dialog>
+
+  <dialog id="receiptDialog" class="app-dialog receipt-dialog" aria-labelledby="receiptDialogTitle">
+    <div class="receipt-dialog-inner">
+      <div class="dialog-header">
+        <div>
+          <p class="eyebrow">AI RECEIPT SCAN</p>
+          <h2 id="receiptDialogTitle">領収書を読み取る</h2>
+        </div>
+        <button class="icon-button close-button" type="button" data-close-receipt aria-label="閉じる">×</button>
+      </div>
+      <p class="receipt-lead">領収書を撮影または選択すると、支払日・病院名・金額をAIが下書きします。保存前に必ず内容を確認してください。</p>
+      <label class="receipt-picker" id="receiptPicker">
+        <input id="receiptImageInput" type="file" accept="image/*" capture="environment">
+        <span class="receipt-picker-icon">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h3l1.4-2h7.2L17 7h3v12H4Z"/><circle cx="12" cy="13" r="3.5"/></svg>
+        </span>
+        <strong>領収書を撮影・選択</strong>
+        <small>JPEG・PNG・HEICなど、10MBまで</small>
+      </label>
+      <div class="receipt-preview" id="receiptPreview" hidden>
+        <img id="receiptPreviewImage" alt="選択した領収書のプレビュー">
+        <button class="secondary-button" id="changeReceiptButton" type="button">写真を選び直す</button>
+      </div>
+      <label class="consent-field">
+        <input id="receiptConsent" type="checkbox">
+        <span><strong>画像をGoogle Gemini APIへ送信することに同意します</strong><small>画像には氏名や医療情報が含まれる場合があります。画像はMedipassには保存しません。</small></span>
+      </label>
+      <p class="form-error" id="receiptError" role="alert"></p>
+      <div class="receipt-progress" id="receiptProgress" hidden>
+        <span class="receipt-spinner" aria-hidden="true"></span>
+        <div><strong>領収書を読み取っています</strong><small>通常は数秒から30秒ほどかかります。</small></div>
+      </div>
+      <div class="dialog-actions">
+        <button class="secondary-button" type="button" data-close-receipt>キャンセル</button>
+        <button class="primary-button" id="analyzeReceiptButton" type="button">AIで読み取る</button>
+      </div>
     </div>
   </dialog>
 
