@@ -1,13 +1,13 @@
-const CACHE_NAME = "medipass-shell-v5";
+const CACHE_NAME = "medipass-shell-v6";
 const APP_SHELL = [
   "./",
   "./index.html",
-  "./styles.css",
-  "./app.mjs",
-  "./core.mjs",
-  "./firebase-sync.mjs",
-  "./ai-receipt.mjs",
-  "./site.webmanifest",
+  "./styles.css?v=6",
+  "./app.mjs?v=6",
+  "./core.mjs?v=6",
+  "./firebase-sync.mjs?v=6",
+  "./ai-receipt.mjs?v=6",
+  "./site.webmanifest?v=6",
   "./icon.svg",
   "./icon-192.png",
   "./icon-512.png",

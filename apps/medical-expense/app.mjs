@@ -7,12 +7,12 @@ import {
   normalizeRecord,
   normalizeState,
   toCsv,
-} from "./core.mjs";
+} from "./core.mjs?v=6";
 import {
   GEMINI_KEY_STORAGE,
   analyzeReceipt,
   prepareImage,
-} from "./ai-receipt.mjs";
+} from "./ai-receipt.mjs?v=6";
 
 const $ = (selector) => document.querySelector(selector);
 const yen = new Intl.NumberFormat("ja-JP", { style: "currency", currency: "JPY", maximumFractionDigits: 0 });
@@ -642,7 +642,7 @@ async function handleCloudChange(detail) {
 
 async function initializeCloudSync() {
   try {
-    const module = await import("./firebase-sync.mjs");
+    const module = await import("./firebase-sync.mjs?v=6");
     cloudSync = module.cloudSync;
     cloudSync.subscribe(handleCloudChange);
   } catch {
