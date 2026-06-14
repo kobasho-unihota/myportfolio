@@ -150,7 +150,7 @@ export function gmailQuery(lastSyncedAt) {
 }
 
 export function hotelRescanQuery() {
-  return `newer_than:2y from:travel@mail.travel.rakuten.co.jp {subject:"予約完了メール" subject:"予約確認メール" subject:"キャンセル確認メール"} -in:trash -in:spam`;
+  return `newer_than:2y {from:travel@mail.travel.rakuten.co.jp from:no-reply@mail.travel.rakuten.co.jp} {subject:"予約完了メール" subject:"予約確認メール" subject:"キャンセル確認メール"} -in:trash -in:spam`;
 }
 
 export function flightRescanQuery() {

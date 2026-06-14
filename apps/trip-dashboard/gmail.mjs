@@ -55,10 +55,20 @@ function normalizeMessage(message) {
 function extractBody(payload) {
   const plain = findPart(payload, "text/plain");
   const html = findPart(payload, "text/html");
-  if (html) return htmlToText(decodeBody(html.body?.data || "", partCharset(html)));
-  if (plain) return decodeBody(plain.body?.data || "", partCharset(plain));
+  const plainText = plain ? decodeBody(plain.body?.data || "", partCharset(plain)) : "";
+  const htmlText = html ? htmlToText(decodeBody(html.body?.data || "", partCharset(html))) : "";
+  if (plainText || htmlText) return chooseBodyText(plainText, htmlText);
   return decodeBody(payload?.body?.data || "", partCharset(payload));
 }
+
+export function chooseBodyText(plainText, htmlText) {
+  const normalizedPlain = plainText.trim();
+  const normalizedHtml = htmlText.trim();
+  const hasStructuredTravelDetails = /予約(?:受付)?番号|チェックイン(?:日時)?|チェックアウト|フライト詳細|便情報/.test(normalizedPlain);
+  if (hasStructuredTravelDetails) return normalizedPlain;
+  return normalizedHtml || normalizedPlain;
+}
+
 function findPart(part, mimeType) {
   if (!part) return null;
   if (part.mimeType === mimeType && part.body?.data) return part;

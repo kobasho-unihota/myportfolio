@@ -1,6 +1,6 @@
-import { bookingWarnings, effectiveBooking, flightRescanQuery, gmailQuery, groupTrips, hotelRescanQuery, mergeBookings, parseTravelEmails } from "./core.mjs?v=7";
-import { fetchTravelMessages } from "./gmail.mjs?v=7";
-import { cloudSync } from "./firebase-sync.mjs?v=7";
+import { bookingWarnings, effectiveBooking, flightRescanQuery, gmailQuery, groupTrips, hotelRescanQuery, mergeBookings, parseTravelEmails } from "./core.mjs?v=8";
+import { fetchTravelMessages } from "./gmail.mjs?v=8";
+import { cloudSync } from "./firebase-sync.mjs?v=8";
 
 const state = {
   user: null,
@@ -94,8 +94,15 @@ async function rescanAllBookings() {
     const token = await cloudSync.authorizeGmail();
     const hotelMessages = await fetchTravelMessages(token, hotelRescanQuery(), updateProgress);
     const flightMessages = await fetchTravelMessages(token, flightRescanQuery(), updateProgress);
-    const hotels = mergeBookings([], hotelMessages.flatMap(parseTravelEmails).filter((booking) => booking.type === "hotel"));
+    const parsedHotels = hotelMessages.flatMap(parseTravelEmails).filter((booking) => booking.type === "hotel");
+    const hotels = mergeBookings([], parsedHotels);
     const flights = mergeBookings([], flightMessages.flatMap(parseTravelEmails).filter((booking) => booking.type === "flight"));
+    if (!hotelMessages.length) {
+      throw new Error("楽天トラベルの対象メールが見つかりませんでした。既存のホテル予約は変更していません。");
+    }
+    if (!hotels.length) {
+      throw new Error(`楽天メール${hotelMessages.length}件を取得しましたが、ホテル予約を解析できませんでした。既存のホテル予約は変更していません。`);
+    }
     updateProgress({ phase: "save", current: 0, total: hotels.length + flights.length });
     await cloudSync.replaceHotelBookings(hotels);
     updateProgress({ phase: "save", current: hotels.length, total: hotels.length + flights.length });
@@ -104,7 +111,7 @@ async function rescanAllBookings() {
     await cloudSync.saveSettings({ ...state.settings, lastSyncedAt: new Date().toISOString() });
     const activeHotels = hotels.filter((booking) => booking.status !== "cancelled").length;
     const activeFlights = flights.filter((booking) => booking.status !== "cancelled").length;
-    showToast(`航空券${activeFlights}件、ホテル${activeHotels}件を再構築しました`);
+    showToast(`楽天メール${hotelMessages.length}件からホテル${activeHotels}件、航空券${activeFlights}件を再構築しました`);
     showView("bookings");
   } catch (error) {
     showToast(error.status === 401 ? "認証期限が切れました。もう一度実行してください。" : readableError(error));
