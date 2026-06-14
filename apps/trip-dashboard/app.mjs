@@ -1,6 +1,6 @@
-import { bookingWarnings, effectiveBooking, flightRescanQuery, gmailQuery, groupTrips, hotelRescanQuery, mergeBookings, parseTravelEmails } from "./core.mjs?v=6";
-import { fetchTravelMessages } from "./gmail.mjs?v=6";
-import { cloudSync } from "./firebase-sync.mjs?v=6";
+import { bookingWarnings, effectiveBooking, flightRescanQuery, gmailQuery, groupTrips, hotelRescanQuery, mergeBookings, parseTravelEmails } from "./core.mjs?v=7";
+import { fetchTravelMessages } from "./gmail.mjs?v=7";
+import { cloudSync } from "./firebase-sync.mjs?v=7";
 
 const state = {
   user: null,

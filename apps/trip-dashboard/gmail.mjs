@@ -55,8 +55,8 @@ function normalizeMessage(message) {
 function extractBody(payload) {
   const plain = findPart(payload, "text/plain");
   const html = findPart(payload, "text/html");
-  if (plain) return decodeBody(plain.body?.data || "", partCharset(plain));
   if (html) return htmlToText(decodeBody(html.body?.data || "", partCharset(html)));
+  if (plain) return decodeBody(plain.body?.data || "", partCharset(plain));
   return decodeBody(payload?.body?.data || "", partCharset(payload));
 }
 function findPart(part, mimeType) {
@@ -83,10 +83,21 @@ function decodeBody(value, charset = "utf-8") {
     return new TextDecoder().decode(bytes);
   }
 }
-function htmlToText(html) {
+export function htmlToText(html) {
   const documentNode = new DOMParser().parseFromString(html, "text/html");
+  documentNode.querySelectorAll("script, style, noscript").forEach((element) => element.remove());
   documentNode.querySelectorAll("a[href]").forEach((anchor) => {
     anchor.replaceWith(`[${anchor.textContent.trim()}](${anchor.href})`);
   });
-  return documentNode.body.textContent.replace(/\n{3,}/g, "\n\n").trim();
+  documentNode.querySelectorAll("br").forEach((element) => {
+    element.replaceWith(documentNode.createTextNode("\n"));
+  });
+  documentNode.querySelectorAll("td, th, tr, p, div, li, h1, h2, h3, h4").forEach((element) => {
+    element.append(documentNode.createTextNode("\n"));
+  });
+  return documentNode.body.textContent
+    .replace(/\r/g, "")
+    .replace(/[ \t]+\n/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
 }
