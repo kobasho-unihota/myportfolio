@@ -1,6 +1,6 @@
-import { bookingWarnings, effectiveBooking, flightRescanQuery, gmailQuery, groupTrips, hotelRescanQuery, mergeBookings, parseTravelEmail } from "./core.mjs?v=5";
-import { fetchTravelMessages } from "./gmail.mjs?v=5";
-import { cloudSync } from "./firebase-sync.mjs?v=5";
+import { bookingWarnings, effectiveBooking, flightRescanQuery, gmailQuery, groupTrips, hotelRescanQuery, mergeBookings, parseTravelEmails } from "./core.mjs?v=6";
+import { fetchTravelMessages } from "./gmail.mjs?v=6";
+import { cloudSync } from "./firebase-sync.mjs?v=6";
 
 const state = {
   user: null,
@@ -70,7 +70,7 @@ async function syncGmail() {
     setSyncing(true);
     const token = await cloudSync.authorizeGmail();
     const messages = await fetchTravelMessages(token, gmailQuery(state.settings.lastSyncedAt), updateProgress);
-    const parsed = messages.map(parseTravelEmail).filter(Boolean);
+    const parsed = messages.flatMap(parseTravelEmails);
     const merged = mergeBookings(state.bookings, parsed);
     const changed = merged.filter((next) => JSON.stringify(state.bookings.find((item) => item.id === next.id)) !== JSON.stringify(next));
     updateProgress({ phase: "save", current: 0, total: changed.length });
@@ -94,8 +94,8 @@ async function rescanAllBookings() {
     const token = await cloudSync.authorizeGmail();
     const hotelMessages = await fetchTravelMessages(token, hotelRescanQuery(), updateProgress);
     const flightMessages = await fetchTravelMessages(token, flightRescanQuery(), updateProgress);
-    const hotels = mergeBookings([], hotelMessages.map(parseTravelEmail).filter((booking) => booking?.type === "hotel"));
-    const flights = mergeBookings([], flightMessages.map(parseTravelEmail).filter((booking) => booking?.type === "flight"));
+    const hotels = mergeBookings([], hotelMessages.flatMap(parseTravelEmails).filter((booking) => booking.type === "hotel"));
+    const flights = mergeBookings([], flightMessages.flatMap(parseTravelEmails).filter((booking) => booking.type === "flight"));
     updateProgress({ phase: "save", current: 0, total: hotels.length + flights.length });
     await cloudSync.replaceHotelBookings(hotels);
     updateProgress({ phase: "save", current: hotels.length, total: hotels.length + flights.length });

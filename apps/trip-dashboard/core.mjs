@@ -9,6 +9,10 @@ const AIRPORT_ALIASES = {
 };
 
 export function parseTravelEmail(message) {
+  return parseTravelEmails(message)[0] || null;
+}
+
+export function parseTravelEmails(message) {
   const from = String(message.from || message.from_ || "").toLowerCase();
   const subject = String(message.subject || "");
   const body = normalizeText(message.body || "");
@@ -23,12 +27,13 @@ export function parseTravelEmail(message) {
   };
 
   if (from.includes("jal.com") || subject.includes("JAL国内線")) {
-    return parseJal({ subject, body, source });
+    return parseJalItineraries({ subject, body, source });
   }
   if (from.includes("travel.rakuten.co.jp") || subject.includes("楽天トラベル")) {
-    return parseRakuten({ subject, body, source });
+    const booking = parseRakuten({ subject, body, source });
+    return booking ? [booking] : [];
   }
-  return null;
+  return [];
 }
 
 export function mergeBookings(existing, incoming) {
@@ -73,7 +78,7 @@ export function mergeBookings(existing, incoming) {
 export function effectiveBooking(booking) {
   return {
     ...booking,
-    data: { ...(booking.parsed || {}), ...(booking.overrides || {}) },
+    data: { ...(booking.parsed || {}), ...removeEmpty(booking.overrides || {}) },
   };
 }
 
@@ -141,7 +146,7 @@ export function gmailQuery(lastSyncedAt) {
     String(after.getUTCMonth() + 1).padStart(2, "0"),
     String(after.getUTCDate()).padStart(2, "0"),
   ].join("/");
-  return `after:${date} {from:jal.com from:skyinfo.jal.com from:travel@mail.travel.rakuten.co.jp from:mail.travel.rakuten.co.jp subject:"JAL国内線" subject:"楽天トラベル"} -in:trash -in:spam`;
+  return `after:${date} {from:jal.com from:skyinfo.jal.com from:booking.jal.com from:travel@mail.travel.rakuten.co.jp from:mail.travel.rakuten.co.jp subject:"JAL国内線" subject:"楽天トラベル"} -in:trash -in:spam`;
 }
 
 export function hotelRescanQuery() {
@@ -149,7 +154,44 @@ export function hotelRescanQuery() {
 }
 
 export function flightRescanQuery() {
-  return `newer_than:1y {from:jal.com from:skyinfo.jal.com} subject:"JAL国内線" -in:trash -in:spam`;
+  return `newer_than:1y {from:jal.com from:skyinfo.jal.com from:booking.jal.com} subject:"JAL国内線" -in:trash -in:spam`;
+}
+
+function parseJalItineraries({ subject, body, source }) {
+  const reservationNumber = match(body, /予約番号\s*[:：]?\s*([A-Z0-9]{6,})/i);
+  const status = /取消|キャンセル/.test(subject + body) ? "cancelled" : "confirmed";
+  const bookingLink = firstLink(body, /予約確認|eチケット|予約詳細|手続きに進む/i);
+  const itineraryPattern = /((?:20\d{2})年\s*\d{1,2}月\d{1,2}日)(?:（[^）]+）|\([^)]*\))?\s+(JAL\d{2,4})便\s+([^\n]+?)(\d{1,2}:\d{2})発\s+([^\n]+?)(\d{1,2}:\d{2})着/g;
+  const bookings = [...body.matchAll(itineraryPattern)].map((item) => {
+    const flightDate = parseJapaneseDate(item[1], source.receivedAt);
+    const flightNumber = normalizeFlightNumber(item[2]);
+    const departureTime = item[4];
+    const arrivalTime = item[6];
+    return {
+      id: `jal-${slug(reservationNumber || "unknown")}-${flightDate}-${slug(flightNumber)}`,
+      type: "flight",
+      provider: "JAL",
+      status,
+      source: [source],
+      parsed: {
+        reservationNumber,
+        flightNumber,
+        startAt: combineDateTime(flightDate, departureTime),
+        endAt: combineDateTime(flightDate, arrivalTime, arrivalTime < departureTime),
+        origin: cleanAirport(item[3]),
+        destination: cleanAirport(item[5]),
+        seat: "",
+        statusLink: "",
+        bookingLink,
+      },
+      overrides: {},
+      hidden: false,
+      updatedAt: source.receivedAt,
+    };
+  });
+  if (bookings.length) return bookings;
+  const booking = parseJal({ subject, body, source });
+  return booking ? [booking] : [];
 }
 
 function parseJal({ subject, body, source }) {

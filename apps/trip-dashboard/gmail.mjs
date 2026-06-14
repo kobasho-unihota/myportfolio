@@ -55,9 +55,9 @@ function normalizeMessage(message) {
 function extractBody(payload) {
   const plain = findPart(payload, "text/plain");
   const html = findPart(payload, "text/html");
-  if (plain) return decodeBody(plain.body?.data || "");
-  if (html) return htmlToText(decodeBody(html.body?.data || ""));
-  return decodeBody(payload?.body?.data || "");
+  if (plain) return decodeBody(plain.body?.data || "", partCharset(plain));
+  if (html) return htmlToText(decodeBody(html.body?.data || "", partCharset(html)));
+  return decodeBody(payload?.body?.data || "", partCharset(payload));
 }
 function findPart(part, mimeType) {
   if (!part) return null;
@@ -68,12 +68,20 @@ function findPart(part, mimeType) {
   }
   return null;
 }
-function decodeBody(value) {
+function partCharset(part) {
+  const contentType = (part?.headers || []).find((header) => header.name.toLowerCase() === "content-type")?.value || "";
+  return contentType.match(/charset\s*=\s*["']?([^;"'\s]+)/i)?.[1] || "utf-8";
+}
+function decodeBody(value, charset = "utf-8") {
   if (!value) return "";
   const base64 = value.replace(/-/g, "+").replace(/_/g, "/");
   const binary = atob(base64);
   const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
-  return new TextDecoder().decode(bytes);
+  try {
+    return new TextDecoder(charset).decode(bytes);
+  } catch {
+    return new TextDecoder().decode(bytes);
+  }
 }
 function htmlToText(html) {
   const documentNode = new DOMParser().parseFromString(html, "text/html");
@@ -82,4 +90,3 @@ function htmlToText(html) {
   });
   return documentNode.body.textContent.replace(/\n{3,}/g, "\n\n").trim();
 }
-

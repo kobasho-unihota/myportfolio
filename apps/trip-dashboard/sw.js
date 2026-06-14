@@ -1,13 +1,13 @@
-const CACHE_NAME = "tripboard-shell-v5";
+const CACHE_NAME = "tripboard-shell-v6";
 const APP_SHELL = [
   "./",
   "./index.html",
-  "./styles.css?v=5",
-  "./app.mjs?v=5",
-  "./core.mjs?v=5",
-  "./gmail.mjs?v=5",
-  "./firebase-sync.mjs?v=5",
-  "./site.webmanifest?v=5",
+  "./styles.css?v=6",
+  "./app.mjs?v=6",
+  "./core.mjs?v=6",
+  "./gmail.mjs?v=6",
+  "./firebase-sync.mjs?v=6",
+  "./site.webmanifest?v=6",
   "./icon.svg",
   "./icon-192.png",
   "./icon-512.png",
