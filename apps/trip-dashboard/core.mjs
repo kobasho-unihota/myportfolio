@@ -30,10 +30,66 @@ export function parseTravelEmails(message) {
     return parseJalItineraries({ subject, body, source });
   }
   if (from.includes("travel.rakuten.co.jp") || subject.includes("楽天トラベル")) {
-    const booking = parseRakuten({ subject, body, source });
-    return booking ? [booking] : [];
+    const result = parseRakutenHotelDetailed({ ...message, body, subject, receivedAt, source });
+    return result.booking ? [result.booking] : [];
   }
   return [];
+}
+
+export function parseRakutenHotelDetailed(message) {
+  const from = String(message.from || message.from_ || "").toLowerCase();
+  const subject = String(message.subject || "");
+  if (!from.includes("travel.rakuten.co.jp") && !subject.includes("楽天トラベル")) {
+    return { booking: null, reason: "楽天メール判定外", missingFields: [] };
+  }
+  const receivedAt = normalizeDateTime(message.receivedAt || message.email_ts) || new Date().toISOString();
+  const source = message.source || {
+    messageId: String(message.id || ""),
+    threadId: String(message.threadId || message.thread_id || ""),
+    subject,
+    from: String(message.from || message.from_ || ""),
+    receivedAt,
+    url: message.url || message.display_url || "",
+  };
+  const bodies = uniqueBy([
+    { name: "selected", text: normalizeText(message.body || "") },
+    { name: "plain", text: normalizeText(message.bodyVariants?.plain || "") },
+    { name: "html", text: normalizeText(message.bodyVariants?.html || "") },
+    { name: "combined", text: normalizeText(message.bodyVariants?.combined || "") },
+  ].filter((item) => item.text), (item) => item.text);
+  if (!bodies.length) {
+    return { booking: null, reason: "本文なし", missingFields: ["reservationNumber", "name", "checkIn"] };
+  }
+  const attempts = bodies.map((candidate) => ({
+    ...candidate,
+    booking: parseRakuten({ subject, body: candidate.text, source }),
+  }));
+  const best = attempts
+    .filter((attempt) => attempt.booking)
+    .sort((a, b) => hotelCompleteness(b.booking) - hotelCompleteness(a.booking))[0];
+  if (!best) {
+    return { booking: null, reason: "予約番号なし", missingFields: ["reservationNumber"] };
+  }
+  const missingFields = [
+    ["reservationNumber", best.booking.parsed.reservationNumber],
+    ["name", best.booking.parsed.name],
+    ["checkIn", best.booking.parsed.checkIn],
+  ].filter(([, value]) => !value).map(([field]) => field);
+  if (missingFields.length) {
+    return {
+      booking: null,
+      reason: `必須項目不足: ${missingFields.join(", ")}`,
+      missingFields,
+      reservationNumber: best.booking.parsed.reservationNumber,
+      bodyVariant: best.name,
+    };
+  }
+  return {
+    booking: best.booking,
+    reason: "",
+    missingFields: [],
+    bodyVariant: best.name,
+  };
 }
 
 export function mergeBookings(existing, incoming) {
@@ -167,11 +223,23 @@ export function gmailQuery(lastSyncedAt) {
     String(after.getUTCMonth() + 1).padStart(2, "0"),
     String(after.getUTCDate()).padStart(2, "0"),
   ].join("/");
-  return `after:${date} {from:jal.com from:skyinfo.jal.com from:booking.jal.com from:travel@mail.travel.rakuten.co.jp from:mail.travel.rakuten.co.jp subject:"JAL国内線" subject:"楽天トラベル"} -in:trash -in:spam`;
+  return `after:${date} {from:jal.com from:skyinfo.jal.com from:booking.jal.com subject:"JAL国内線"} -in:trash -in:spam`;
+}
+
+export function hotelGmailQuery(lastSyncedAt) {
+  const after = lastSyncedAt
+    ? new Date(Date.parse(lastSyncedAt) - 30 * 86400000)
+    : new Date(Date.now() - 365 * 86400000);
+  const date = [
+    after.getUTCFullYear(),
+    String(after.getUTCMonth() + 1).padStart(2, "0"),
+    String(after.getUTCDate()).padStart(2, "0"),
+  ].join("/");
+  return `after:${date} ${rakutenSearchTerms()} -in:trash -in:spam`;
 }
 
 export function hotelRescanQuery() {
-  return `newer_than:2y {from:travel@mail.travel.rakuten.co.jp from:no-reply@mail.travel.rakuten.co.jp} {subject:"予約完了メール" subject:"予約確認メール" subject:"キャンセル確認メール"} -in:trash -in:spam`;
+  return `newer_than:2y ${rakutenSearchTerms()} -in:trash -in:spam`;
 }
 
 export function flightRescanQuery() {
@@ -309,6 +377,26 @@ function parseRakuten({ subject, body, source }) {
     hidden: false,
     updatedAt: source.receivedAt,
   };
+}
+
+function rakutenSearchTerms() {
+  return `{from:travel@mail.travel.rakuten.co.jp from:no-reply@mail.travel.rakuten.co.jp subject:"楽天トラベル"} {subject:"予約" subject:"キャンセル" subject:"予約確認" subject:"予約完了" subject:"予約確認メール" subject:"予約完了メール" subject:"キャンセル確認メール"}`;
+}
+
+function hotelCompleteness(booking) {
+  const data = booking?.parsed || {};
+  return [
+    data.reservationNumber,
+    data.name,
+    data.checkIn,
+    data.checkOut,
+    data.address,
+    data.phone,
+    data.roomType,
+    data.plan,
+    data.amount,
+    data.managementLink,
+  ].filter(Boolean).length;
 }
 
 function buildTrip(items, homeAirport) {

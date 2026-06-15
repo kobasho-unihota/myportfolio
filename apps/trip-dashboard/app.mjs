@@ -1,6 +1,7 @@
-import { bookingWarnings, effectiveBooking, flightRescanQuery, gmailQuery, groupTrips, hotelRescanQuery, mergeBookings, parseTravelEmails } from "./core.mjs?v=9";
-import { fetchTravelMessages } from "./gmail.mjs?v=9";
-import { cloudSync } from "./firebase-sync.mjs?v=9";
+import { bookingWarnings, effectiveBooking, flightRescanQuery, gmailQuery, groupTrips, hotelGmailQuery, hotelRescanQuery, mergeBookings, parseTravelEmails } from "./core.mjs?v=10";
+import { fetchTravelMessages } from "./gmail.mjs?v=10";
+import { cloudSync } from "./firebase-sync.mjs?v=10";
+import { runHotelPipeline } from "./hotel-pipeline.mjs?v=10";
 
 const state = {
   user: null,
@@ -69,11 +70,12 @@ async function syncGmail() {
   try {
     setSyncing(true);
     const token = await cloudSync.authorizeGmail();
-    const messages = await fetchTravelMessages(token, gmailQuery(state.settings.lastSyncedAt), updateProgress);
-    const parsed = messages.flatMap(parseTravelEmails);
-    const rakutenMessages = messages.filter(isRakutenMessage);
-    const parsedHotels = parsed.filter((booking) => booking.type === "hotel");
-    reportHotelDiagnostics(rakutenMessages, parsedHotels);
+    const hotelMessages = await fetchTravelMessages(token, hotelGmailQuery(state.settings.lastSyncedAt), updateProgress);
+    const hotelResult = runHotelPipeline(hotelMessages);
+    reportHotelDiagnostics(hotelResult.diagnostics);
+    const flightMessages = await fetchTravelMessages(token, gmailQuery(state.settings.lastSyncedAt), updateProgress);
+    const flights = flightMessages.flatMap(parseTravelEmails).filter((booking) => booking.type === "flight");
+    const parsed = [...flights, ...hotelResult.bookings];
     const merged = mergeBookings(state.bookings, parsed);
     const changed = merged.filter((next) => JSON.stringify(state.bookings.find((item) => item.id === next.id)) !== JSON.stringify(next));
     updateProgress({ phase: "save", current: 0, total: changed.length });
@@ -82,7 +84,7 @@ async function syncGmail() {
       updateProgress({ phase: "save", current: index + 1, total: changed.length });
     }
     await cloudSync.saveSettings({ ...state.settings, lastSyncedAt: new Date().toISOString() });
-    showToast(`${parsed.length}件の予約メールを確認しました`);
+    showToast(`ホテル${hotelResult.bookings.length}件、航空券${flights.length}件を確認しました`);
     showView("home");
   } catch (error) {
     showToast(error.status === 401 ? "認証期限が切れました。もう一度更新してください。" : readableError(error));
@@ -96,11 +98,10 @@ async function rescanAllBookings() {
     setSyncing(true, true);
     const token = await cloudSync.authorizeGmail();
     const hotelMessages = await fetchTravelMessages(token, hotelRescanQuery(), updateProgress);
-    reportHotelDiagnostics(hotelMessages, []);
+    const hotelResult = runHotelPipeline(hotelMessages);
+    reportHotelDiagnostics(hotelResult.diagnostics);
     const flightMessages = await fetchTravelMessages(token, flightRescanQuery(), updateProgress);
-    const parsedHotels = hotelMessages.flatMap(parseTravelEmails).filter((booking) => booking.type === "hotel");
-    reportHotelDiagnostics(hotelMessages, parsedHotels);
-    const hotels = mergeBookings([], parsedHotels);
+    const hotels = hotelResult.bookings;
     const flights = mergeBookings([], flightMessages.flatMap(parseTravelEmails).filter((booking) => booking.type === "flight"));
     if (!hotelMessages.length) {
       throw new Error("楽天トラベルの対象メールが見つかりませんでした。既存のホテル予約は変更していません。");
@@ -133,20 +134,19 @@ function updateProgress(progress) {
   elements.syncProgressText.textContent = progress.total ? `${progress.current} / ${progress.total}件` : `${progress.current}件見つかりました`;
 }
 
-function reportHotelDiagnostics(messages, hotels) {
-  const bodyCount = messages.filter((message) => String(message.body || "").trim()).length;
-  const summary = `楽天メール ${messages.length}件 / 本文取得 ${bodyCount}件 / ホテル解析 ${hotels.length}件`;
-  elements.syncDiagnostics.textContent = summary;
+function reportHotelDiagnostics(diagnostics) {
+  elements.rakutenSearchCount.textContent = String(diagnostics.searchCount);
+  elements.rakutenBodyCount.textContent = String(diagnostics.bodyCount);
+  elements.rakutenParsedCount.textContent = String(diagnostics.parsedMessageCount);
+  elements.rakutenFailureCount.textContent = String(diagnostics.failureCount);
+  const failureSummary = diagnostics.failureExamples.length
+    ? diagnostics.failureExamples.map((item) => `${item.reason}: ${item.subject || "件名なし"}`).join(" / ")
+    : "解析失敗はありません";
+  elements.rakutenFailureExamples.textContent = `統合後 ${diagnostics.bookingCount}予約。${failureSummary}`;
   console.info("[TripBoard hotel sync]", {
-    rakutenMessages: messages.length,
-    bodies: bodyCount,
-    parsedHotels: hotels.length,
+    ...diagnostics,
+    failureExamples: diagnostics.failureExamples,
   });
-}
-
-function isRakutenMessage(message) {
-  return String(message.from || "").toLowerCase().includes("travel.rakuten.co.jp") ||
-    String(message.subject || "").includes("楽天トラベル");
 }
 
 function setSyncing(active, fullRescan = false) {

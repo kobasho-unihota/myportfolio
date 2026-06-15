@@ -7,11 +7,13 @@ import {
   flightRescanQuery,
   gmailQuery,
   groupTrips,
+  hotelGmailQuery,
   hotelRescanQuery,
   mergeBookings,
   parseTravelEmail,
   parseTravelEmails,
 } from "./core.mjs";
+import { runHotelPipeline } from "./hotel-pipeline.mjs";
 
 async function readFixture(name) {
   return JSON.parse(await readFile(new URL(`./fixtures/rakuten/${name}`, import.meta.url), "utf8"));
@@ -311,6 +313,37 @@ test("解析ホテル0件ではFirestore削除操作を生成しない", () => {
   assert.deepEqual(operations, []);
 });
 
+test("完全再取得で楽天メール0件なら既存ホテルを削除しない", () => {
+  const current = parseTravelEmail(rakutenCompleteFixture);
+  const result = runHotelPipeline([]);
+  const operations = buildProviderReplacementOperations(
+    [current],
+    "楽天トラベル",
+    result.bookings,
+    { preserveExistingOnEmpty: true }
+  );
+  assert.equal(result.diagnostics.searchCount, 0);
+  assert.deepEqual(operations, []);
+});
+
+test("完全再取得でホテル解析0件なら既存ホテルを削除しない", () => {
+  const current = parseTravelEmail(rakutenCompleteFixture);
+  const invalid = {
+    ...rakutenCompleteFixture,
+    body: "楽天トラベル\n予約に関するお知らせ",
+  };
+  const result = runHotelPipeline([invalid]);
+  const operations = buildProviderReplacementOperations(
+    [current],
+    "楽天トラベル",
+    result.bookings,
+    { preserveExistingOnEmpty: true }
+  );
+  assert.equal(result.diagnostics.searchCount, 1);
+  assert.equal(result.diagnostics.bookingCount, 0);
+  assert.deepEqual(operations, []);
+});
+
 test("fixture: 予約番号がない楽天メールはホテル予約にしない", () => {
   const message = { ...rakutenCompleteFixture, body: rakutenCompleteFixture.body.replace("RYTEST1001", "") };
   assert.equal(parseTravelEmail(message), null);
@@ -386,6 +419,8 @@ test("初回と差分同期のGmail検索期間を生成する", () => {
   assert.match(gmailQuery(""), /after:/);
   assert.match(gmailQuery(""), /JAL国内線/);
   assert.match(gmailQuery(""), /booking\.jal\.com/);
+  assert.match(hotelGmailQuery("2026-06-13T00:00:00Z"), /after:2026\/05\/14/);
+  assert.match(hotelGmailQuery(""), /subject:"楽天トラベル"/);
 });
 
 test("対象外メールを無視する", () => {
@@ -411,6 +446,65 @@ test("ホテル完全再取得は楽天トラベルを過去2年検索する", (
   assert.match(hotelRescanQuery(), /newer_than:2y/);
   assert.match(hotelRescanQuery(), /キャンセル確認メール/);
   assert.match(hotelRescanQuery(), /no-reply@mail\.travel\.rakuten\.co\.jp/);
+  assert.match(hotelRescanQuery(), /subject:"楽天トラベル"/);
+  assert.match(hotelRescanQuery(), /subject:"予約"/);
+  assert.match(hotelRescanQuery(), /subject:"キャンセル"/);
+});
+
+test("予約番号だけで施設名とチェックインがない楽天メールは保存対象外にする", () => {
+  const message = {
+    ...rakutenCompleteFixture,
+    body: "楽天トラベル\n予約受付番号\nRYTEST-NO-DETAILS",
+  };
+  assert.equal(parseTravelEmail(message), null);
+});
+
+test("ホテルパイプラインは段階別件数と失敗理由を返す", () => {
+  const missingNumber = {
+    ...rakutenCompleteFixture,
+    id: "missing-number",
+    body: rakutenCompleteFixture.body.replace("RYTEST1001", ""),
+  };
+  const unrelated = {
+    id: "unrelated-reservation",
+    from: "other@example.com",
+    subject: "予約のお知らせ",
+    receivedAt: "2026-06-10T00:00:00.000Z",
+    body: "一般的な予約メールです",
+  };
+  const result = runHotelPipeline([rakutenCompleteFixture, missingNumber, unrelated]);
+  assert.equal(result.diagnostics.searchCount, 3);
+  assert.equal(result.diagnostics.bodyCount, 3);
+  assert.equal(result.diagnostics.candidateCount, 2);
+  assert.equal(result.diagnostics.parsedMessageCount, 1);
+  assert.equal(result.diagnostics.bookingCount, 1);
+  assert.equal(result.diagnostics.failureCount, 2);
+  assert.deepEqual(result.diagnostics.failureReasons, [
+    { reason: "予約番号なし", count: 1 },
+    { reason: "楽天メール判定外", count: 1 },
+  ]);
+});
+
+test("ホテルパイプラインは同じ予約番号のメールを1予約へ統合する", () => {
+  const result = runHotelPipeline([
+    rakutenCompleteFixture,
+    rakutenConfirmationFixture,
+    rakutenCancellationFixture,
+  ]);
+  assert.equal(result.diagnostics.parsedMessageCount, 3);
+  assert.equal(result.diagnostics.bookingCount, 1);
+  assert.equal(result.bookings[0].id, "rakuten-rytest1001");
+  assert.equal(result.bookings[0].status, "cancelled");
+  assert.equal(result.bookings[0].source.length, 3);
+});
+
+test("ホテルパイプラインの予約は次の出張表示用データになる", () => {
+  const result = runHotelPipeline([rakutenCompleteFixture]);
+  const [trip] = groupTrips(result.bookings, { homeAirport: "福岡" });
+  assert.equal(trip.items.length, 1);
+  assert.equal(trip.items[0].type, "hotel");
+  assert.equal(trip.items[0].data.name, "テストホテル東京");
+  assert.equal(trip.startAt, "2026-07-29T13:30:00.000Z");
 });
 
 test("航空券完全再取得はJAL国内線を過去1年検索する", () => {

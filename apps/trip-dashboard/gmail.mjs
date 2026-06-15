@@ -41,32 +41,53 @@ async function normalizeMessage(message, requestHeaders) {
   const messageHeaders = Object.fromEntries(
     (message.payload?.headers || []).map((header) => [header.name.toLowerCase(), header.value])
   );
+  const bodies = await extractBodies(message.payload, message.id, requestHeaders);
   return {
     id: message.id,
     threadId: message.threadId,
     from: messageHeaders.from || "",
     subject: messageHeaders.subject || "",
     receivedAt: new Date(Number(message.internalDate)).toISOString(),
-    body: await extractBody(message.payload, message.id, requestHeaders),
+    body: bodies.selected,
+    bodyVariants: {
+      plain: bodies.plain,
+      html: bodies.html,
+      combined: bodies.combined,
+    },
     url: `https://mail.google.com/mail/u/0/#all/${message.id}`,
   };
 }
 
-async function extractBody(payload, messageId, requestHeaders) {
-  const plain = findPart(payload, "text/plain");
-  const html = findPart(payload, "text/html");
-  const plainText = plain ? decodeBody(await readPartBody(plain, messageId, requestHeaders), partCharset(plain)) : "";
-  const htmlText = html ? htmlToText(decodeBody(await readPartBody(html, messageId, requestHeaders), partCharset(html))) : "";
-  if (plainText || htmlText) return chooseBodyText(plainText, htmlText);
-  return decodeBody(await readPartBody(payload, messageId, requestHeaders), partCharset(payload));
+async function extractBodies(payload, messageId, requestHeaders) {
+  const plainParts = findParts(payload, "text/plain");
+  const htmlParts = findParts(payload, "text/html");
+  const plain = (await Promise.all(plainParts.map(async (part) =>
+    decodeBody(await readPartBody(part, messageId, requestHeaders), partCharset(part)))))
+    .filter(Boolean)
+    .join("\n\n");
+  const html = (await Promise.all(htmlParts.map(async (part) =>
+    htmlToText(decodeBody(await readPartBody(part, messageId, requestHeaders), partCharset(part))))))
+    .filter(Boolean)
+    .join("\n\n");
+  const fallback = !plain && !html
+    ? decodeBody(await readPartBody(payload, messageId, requestHeaders), partCharset(payload))
+    : "";
+  const normalizedPlain = normalizeBodyText(plain || fallback);
+  const normalizedHtml = normalizeBodyText(html);
+  return {
+    plain: normalizedPlain,
+    html: normalizedHtml,
+    combined: uniqueBodies([normalizedPlain, normalizedHtml]).join("\n\n"),
+    selected: chooseBodyText(normalizedPlain, normalizedHtml),
+  };
 }
 
 export function chooseBodyText(plainText, htmlText) {
-  const normalizedPlain = plainText.trim();
-  const normalizedHtml = htmlText.trim();
-  const hasStructuredTravelDetails = /予約(?:受付)?番号|チェックイン(?:日時)?|チェックアウト|フライト詳細|便情報/.test(normalizedPlain);
-  if (hasStructuredTravelDetails) return normalizedPlain;
-  return normalizedHtml || normalizedPlain;
+  const normalizedPlain = normalizeBodyText(plainText);
+  const normalizedHtml = normalizeBodyText(htmlText);
+  if (!normalizedPlain) return normalizedHtml;
+  if (!normalizedHtml) return normalizedPlain;
+  return bodyScore(normalizedHtml) > bodyScore(normalizedPlain) ? normalizedHtml : normalizedPlain;
 }
 
 async function readPartBody(part, messageId, headers) {
@@ -80,14 +101,13 @@ async function readPartBody(part, messageId, headers) {
   return data.data || "";
 }
 
-function findPart(part, mimeType) {
-  if (!part) return null;
-  if (part.mimeType === mimeType && (part.body?.data || part.body?.attachmentId)) return part;
+function findParts(part, mimeType, found = []) {
+  if (!part) return found;
+  if (part.mimeType === mimeType && (part.body?.data || part.body?.attachmentId)) found.push(part);
   for (const child of part.parts || []) {
-    const found = findPart(child, mimeType);
-    if (found) return found;
+    findParts(child, mimeType, found);
   }
-  return null;
+  return found;
 }
 function partCharset(part) {
   const contentType = (part?.headers || []).find((header) => header.name.toLowerCase() === "content-type")?.value || "";
@@ -146,4 +166,35 @@ function htmlToTextFallback(html) {
 
 function stripTags(value) {
   return String(value).replace(/<[^>]+>/g, "");
+}
+
+function normalizeBodyText(value) {
+  return String(value || "")
+    .replace(/\r/g, "")
+    .replace(/\u00a0/g, " ")
+    .replace(/[ \t]+\n/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+function uniqueBodies(values) {
+  return values.filter((value, index) => value && values.indexOf(value) === index);
+}
+
+function bodyScore(value) {
+  const text = String(value || "");
+  const signals = [
+    /予約(?:受付)?番号/i,
+    /(?:ホテル名|宿泊施設名)/,
+    /チェックイン(?:日時)?/,
+    /チェックアウト(?:日)?/,
+    /宿泊施設(?:住所|電話番号)/,
+    /部屋タイプ/,
+    /(?:差引支払額|総合計)/,
+    /フライト詳細|便情報/,
+    /\bJAL\d{2,4}\b/i,
+    /(?:→|発[\s\S]{0,30}着)/,
+  ];
+  return signals.reduce((score, pattern) => score + (pattern.test(text) ? 10 : 0), 0) +
+    Math.min(9, Math.floor(text.length / 1000));
 }

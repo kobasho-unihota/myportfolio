@@ -17,7 +17,7 @@ import {
   setDoc,
   writeBatch,
 } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-firestore.js";
-import { buildProviderReplacementOperations } from "./core.mjs?v=9";
+import { buildProviderReplacementOperations } from "./core.mjs?v=10";
 
 const firebaseConfig = {
   apiKey: "AIzaSyDdRlINBq1fdFbfKKkl5dQQM6rlWAKM9vo",

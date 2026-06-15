@@ -1,0 +1,55 @@
+{
+  "message": {
+    "id": "gmail-rakuten-nested",
+    "threadId": "gmail-rakuten-nested",
+    "internalDate": "1781084838000",
+    "payload": {
+      "mimeType": "multipart/mixed",
+      "headers": [
+        {
+          "name": "From",
+          "value": "travel@mail.travel.rakuten.co.jp"
+        },
+        {
+          "name": "Subject",
+          "value": "「楽天トラベル」予約完了メール (チェックイン日：08/12)"
+        }
+      ],
+      "parts": [
+        {
+          "mimeType": "multipart/alternative",
+          "parts": [
+            {
+              "mimeType": "text/plain",
+              "headers": [
+                {
+                  "name": "Content-Type",
+                  "value": "text/plain; charset=UTF-8"
+                }
+              ],
+              "body": {
+                "attachmentId": "nested-plain",
+                "size": 64
+              }
+            },
+            {
+              "mimeType": "text/html",
+              "headers": [
+                {
+                  "name": "Content-Type",
+                  "value": "text/html; charset=UTF-8"
+                }
+              ],
+              "body": {
+                "attachmentId": "nested-html",
+                "size": 2048
+              }
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "plainText": "楽天トラベル予約\n予約受付番号\nRYTEST4004",
+  "htmlText": "<html><body><table><tr><th>予約受付番号</th><td>RYTEST4004</td></tr><tr><th>ホテル名</th><td>テストホテル札幌</td></tr><tr><th>住所</th><td>〒060-0001 北海道札幌市中央区北一条西1-1</td></tr><tr><th>宿泊施設電話番号</th><td>011-123-4567</td></tr><tr><th>チェックイン</th><td>2026-08-12(水) 19:00</td></tr><tr><th>チェックアウト</th><td>2026-08-14(金)</td></tr><tr><th>部屋タイプ</th><td>禁煙ダブルルーム</td></tr><tr><th>宿泊プラン名</th><td>朝食付プラン</td></tr><tr><th>差引支払額</th><td>32000円</td></tr></table><a href=\"https://example.test/rakuten/manage/RYTEST4004\">予約確認ページ</a></body></html>"
+}
