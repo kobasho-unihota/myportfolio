@@ -1,4 +1,4 @@
-import { mergeBookings, parseRakutenHotelDetailed } from "./core.mjs?v=10";
+import { mergeBookings, parseRakutenHotelDetailed } from "./core.mjs?v=11";
 
 export function runHotelPipeline(messages) {
   const results = messages.map((message) => {

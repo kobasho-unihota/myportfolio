@@ -12,6 +12,10 @@ const nestedFixture = JSON.parse(await readFile(
   new URL("./fixtures/rakuten/gmail-nested-multipart.json", import.meta.url),
   "utf8"
 ));
+const quotedPrintableFixture = JSON.parse(await readFile(
+  new URL("./fixtures/rakuten/gmail-quoted-printable-iso2022jp.json", import.meta.url),
+  "utf8"
+));
 
 function jsonResponse(value) {
   return { ok: true, json: async () => value };
@@ -131,4 +135,27 @@ test("ネストされたmultipartではplainとHTMLを評価して必須項目�
   assert.equal(hotel.id, "rakuten-rytest4004");
   assert.equal(hotel.parsed.name, "テストホテル札幌");
   assert.equal(hotel.parsed.checkIn, "2026-08-12T10:00:00.000Z");
+});
+
+test("quoted-printableのISO-2022-JP楽天本文を復号して解析する", async (context) => {
+  const originalFetch = globalThis.fetch;
+  context.after(() => { globalThis.fetch = originalFetch; });
+  globalThis.fetch = async (url) => {
+    const target = String(url);
+    if (target.includes("/messages?")) {
+      return jsonResponse({ messages: [{ id: quotedPrintableFixture.message.id }] });
+    }
+    if (target.includes(`/messages/${quotedPrintableFixture.message.id}?`)) {
+      return jsonResponse(quotedPrintableFixture.message);
+    }
+    throw new Error(`Unexpected Gmail URL: ${target}`);
+  };
+
+  const [message] = await fetchTravelMessages("test-token", "subject:楽天トラベル");
+  const [hotel] = parseTravelEmails(message);
+
+  assert.match(message.body, /予約番号/);
+  assert.equal(hotel.id, "rakuten-rytest5005");
+  assert.equal(hotel.parsed.name, "テストホテル横浜");
+  assert.equal(hotel.parsed.checkIn, "2026-08-19T11:00:00.000Z");
 });

@@ -62,15 +62,27 @@ async function extractBodies(payload, messageId, requestHeaders) {
   const plainParts = findParts(payload, "text/plain");
   const htmlParts = findParts(payload, "text/html");
   const plain = (await Promise.all(plainParts.map(async (part) =>
-    decodeBody(await readPartBody(part, messageId, requestHeaders), partCharset(part)))))
+    decodeBody(
+      await readPartBody(part, messageId, requestHeaders),
+      partCharset(part),
+      partTransferEncoding(part)
+    ))))
     .filter(Boolean)
     .join("\n\n");
   const html = (await Promise.all(htmlParts.map(async (part) =>
-    htmlToText(decodeBody(await readPartBody(part, messageId, requestHeaders), partCharset(part))))))
+    htmlToText(await decodeBody(
+      await readPartBody(part, messageId, requestHeaders),
+      partCharset(part),
+      partTransferEncoding(part)
+    )))))
     .filter(Boolean)
     .join("\n\n");
   const fallback = !plain && !html
-    ? decodeBody(await readPartBody(payload, messageId, requestHeaders), partCharset(payload))
+    ? await decodeBody(
+      await readPartBody(payload, messageId, requestHeaders),
+      partCharset(payload),
+      partTransferEncoding(payload)
+    )
     : "";
   const normalizedPlain = normalizeBodyText(plain || fallback);
   const normalizedHtml = normalizeBodyText(html);
@@ -113,16 +125,62 @@ function partCharset(part) {
   const contentType = (part?.headers || []).find((header) => header.name.toLowerCase() === "content-type")?.value || "";
   return contentType.match(/charset\s*=\s*["']?([^;"'\s]+)/i)?.[1] || "utf-8";
 }
-function decodeBody(value, charset = "utf-8") {
+function partTransferEncoding(part) {
+  return (part?.headers || [])
+    .find((header) => header.name.toLowerCase() === "content-transfer-encoding")
+    ?.value?.toLowerCase() || "";
+}
+async function decodeBody(value, charset = "utf-8", transferEncoding = "") {
   if (!value) return "";
   const base64 = value.replace(/-/g, "+").replace(/_/g, "/");
   const binary = atob(base64);
-  const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
+  let bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
+  if (transferEncoding.includes("quoted-printable")) {
+    bytes = decodeQuotedPrintable(bytes);
+  }
   try {
     return new TextDecoder(charset).decode(bytes);
   } catch {
-    return new TextDecoder().decode(bytes);
+    return decodeWithFileReader(bytes, charset);
   }
+}
+
+function decodeQuotedPrintable(bytes) {
+  const output = [];
+  for (let index = 0; index < bytes.length; index += 1) {
+    if (bytes[index] !== 0x3d) {
+      output.push(bytes[index]);
+      continue;
+    }
+    if (bytes[index + 1] === 0x0d && bytes[index + 2] === 0x0a) {
+      index += 2;
+      continue;
+    }
+    if (bytes[index + 1] === 0x0a) {
+      index += 1;
+      continue;
+    }
+    const hex = String.fromCharCode(bytes[index + 1] || 0, bytes[index + 2] || 0);
+    if (/^[0-9A-F]{2}$/i.test(hex)) {
+      output.push(Number.parseInt(hex, 16));
+      index += 2;
+      continue;
+    }
+    output.push(bytes[index]);
+  }
+  return Uint8Array.from(output);
+}
+
+async function decodeWithFileReader(bytes, charset) {
+  if (typeof FileReader !== "undefined" && typeof Blob !== "undefined") {
+    return new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result || ""));
+      reader.onerror = () => resolve(new TextDecoder().decode(bytes));
+      reader.readAsText(new Blob([bytes]), charset);
+    });
+  }
+  return new TextDecoder().decode(bytes);
 }
 export function htmlToText(html) {
   if (typeof DOMParser === "undefined") return htmlToTextFallback(html);

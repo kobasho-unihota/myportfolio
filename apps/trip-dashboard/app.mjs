@@ -1,7 +1,7 @@
-import { bookingWarnings, effectiveBooking, flightRescanQuery, gmailQuery, groupTrips, hotelGmailQuery, hotelRescanQuery, mergeBookings, parseTravelEmails } from "./core.mjs?v=10";
-import { fetchTravelMessages } from "./gmail.mjs?v=10";
-import { cloudSync } from "./firebase-sync.mjs?v=10";
-import { runHotelPipeline } from "./hotel-pipeline.mjs?v=10";
+import { bookingWarnings, effectiveBooking, flightRescanQuery, gmailQuery, groupTrips, hotelGmailQuery, hotelRescanQuery, mergeBookings, parseTravelEmails } from "./core.mjs?v=11";
+import { fetchTravelMessages } from "./gmail.mjs?v=11";
+import { cloudSync } from "./firebase-sync.mjs?v=11";
+import { runHotelPipeline } from "./hotel-pipeline.mjs?v=11";
 
 const state = {
   user: null,

@@ -1,0 +1,38 @@
+{
+  "message": {
+    "id": "gmail-rakuten-quoted-printable",
+    "threadId": "gmail-rakuten-quoted-printable",
+    "internalDate": "1781084838000",
+    "payload": {
+      "mimeType": "multipart/alternative",
+      "headers": [
+        {
+          "name": "From",
+          "value": "travel@mail.travel.rakuten.co.jp"
+        },
+        {
+          "name": "Subject",
+          "value": "「楽天トラベル」予約完了メール (チェックイン日：08/19)"
+        }
+      ],
+      "parts": [
+        {
+          "mimeType": "text/plain",
+          "headers": [
+            {
+              "name": "Content-Type",
+              "value": "text/plain; charset=iso-2022-jp"
+            },
+            {
+              "name": "Content-Transfer-Encoding",
+              "value": "quoted-printable"
+            }
+          ],
+          "body": {
+            "data": "PTFCJEIkNE09M0RMc0ZiTUY9MUIoQgo9MUIkQiEmTT0zRExzSFY5Zj0xQihCID0xQiRCISc9MUIoQlJZVEVTVDUwMDUKPTFCJEIiIz0zRElHcTtcQF9MPj0xQihCID0xQiRCISclRiU5JUglWyVGJWsyI0lNPTFCKEIKPTFCJEIhJj0zRElHcTtcQF89M0Q7PTNEaj0xQihCID0xQiRCISciKT0xQihCMjIwLTAwMDEgPTFCJEI_QEZgQG44KTIjSU07VEA-PQo2aD0xQihCMS0xCj0xQiRCISY9M0RJR3E7XEBfRUVPQ0hWOWY9MUIoQiA9MUIkQiEnPTFCKEIwNDUtMTIzLTQ1NjcKPTFCJEIiIyVBJSclQyUvJSQlc0Z8O349MUIoQiA9MUIkQiEnPTFCKEIyMDI2LTA4LTE5KD0xQiRCP2U9MUIoQikgMjA6MDAKPTFCJEIhJiVBJSclQyUvJSIlJiVIRnw9MUIoQiA9MUIkQiEnPTFCKEIyMDI2LTA4LTIxKD0xQiRCNmI9MUIoQikKPTFCJEIhJkl0MjAlPyUkJVc9MUIoQiA9MUIkQiEnNlgxbCVAJVYlayVrITwlYD0xQihCCj0xQiRCIiM6OTB6O1lKJzNbPTFCKEIgPTFCJEIhJz5DSHFARzl-PTFCKEI6IDMwMDAwPTFCJEIxXz0xQihCCj0xQiRCTT0zRExzM05HJyVaITwlOD0xQihCIGh0dHBzOi8vZXhhbXBsZS50ZXN0L3Jha3V0ZW4vbWFuYWdlL1JZVEVTVDUwMDUK"
+          }
+        }
+      ]
+    }
+  }
+}
