@@ -82,6 +82,27 @@ export function effectiveBooking(booking) {
   };
 }
 
+export function buildProviderReplacementOperations(existing, providerName, nextBookings, options = {}) {
+  if (options.preserveExistingOnEmpty && !nextBookings.length) return [];
+  const nextIds = new Set(nextBookings.map((booking) => booking.id));
+  return [
+    ...existing
+      .filter((booking) => booking.provider === providerName && !nextIds.has(booking.id))
+      .map((booking) => ({ type: "delete", id: booking.id })),
+    ...nextBookings.map((booking) => {
+      const current = existing.find((item) => item.id === booking.id);
+      return {
+        type: "set",
+        booking: {
+          ...booking,
+          overrides: current?.overrides || booking.overrides || {},
+          hidden: current?.hidden || false,
+        },
+      };
+    }),
+  ];
+}
+
 export function groupTrips(bookings, settings = {}) {
   const homeAirport = settings.homeAirport || "福岡";
   const active = bookings
@@ -254,7 +275,7 @@ function parseRakuten({ subject, body, source }) {
   const reservationNumber = match(body, /予約(?:受付)?番号\s*[:：]?\s*([A-Z0-9]+)/i);
   if (!reservationNumber) return null;
   const cancelled = /キャンセル確認|予約をキャンセル/.test(subject + body);
-  const separator = String.raw`\s*(?:[:：]\s*|\n\s*)`;
+  const separator = String.raw`[ \t]*(?:(?:[:：][ \t]*)|(?:\n[ \t]*)|(?:[ \t]+))`;
   const name = match(body, new RegExp(String.raw`(?:ホテル名|宿泊施設名)${separator}(?:\[)?([^\]\n]+?)(?:\]\([^)]+\))?(?=\n|$)`));
   const address = match(body, new RegExp(String.raw`(?:住所|宿泊施設住所)${separator}([^\n]+)`));
   const phone = match(body, new RegExp(String.raw`宿泊施設電話番号${separator}([\d-]{10,})`));

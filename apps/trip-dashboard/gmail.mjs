@@ -18,7 +18,7 @@ export async function fetchTravelMessages(accessToken, query, onProgress = () =>
         `https://gmail.googleapis.com/gmail/v1/users/me/messages/${id}?format=full`,
         headers
       );
-      return normalizeMessage(data);
+      return normalizeMessage(data, headers);
     }));
     messages.push(...batch);
     onProgress({ phase: "read", current: Math.min(index + 10, ids.length), total: ids.length });
@@ -37,28 +37,28 @@ async function gmailFetch(url, headers) {
   return response.json();
 }
 
-function normalizeMessage(message) {
-  const headers = Object.fromEntries(
+async function normalizeMessage(message, requestHeaders) {
+  const messageHeaders = Object.fromEntries(
     (message.payload?.headers || []).map((header) => [header.name.toLowerCase(), header.value])
   );
   return {
     id: message.id,
     threadId: message.threadId,
-    from: headers.from || "",
-    subject: headers.subject || "",
+    from: messageHeaders.from || "",
+    subject: messageHeaders.subject || "",
     receivedAt: new Date(Number(message.internalDate)).toISOString(),
-    body: extractBody(message.payload),
+    body: await extractBody(message.payload, message.id, requestHeaders),
     url: `https://mail.google.com/mail/u/0/#all/${message.id}`,
   };
 }
 
-function extractBody(payload) {
+async function extractBody(payload, messageId, requestHeaders) {
   const plain = findPart(payload, "text/plain");
   const html = findPart(payload, "text/html");
-  const plainText = plain ? decodeBody(plain.body?.data || "", partCharset(plain)) : "";
-  const htmlText = html ? htmlToText(decodeBody(html.body?.data || "", partCharset(html))) : "";
+  const plainText = plain ? decodeBody(await readPartBody(plain, messageId, requestHeaders), partCharset(plain)) : "";
+  const htmlText = html ? htmlToText(decodeBody(await readPartBody(html, messageId, requestHeaders), partCharset(html))) : "";
   if (plainText || htmlText) return chooseBodyText(plainText, htmlText);
-  return decodeBody(payload?.body?.data || "", partCharset(payload));
+  return decodeBody(await readPartBody(payload, messageId, requestHeaders), partCharset(payload));
 }
 
 export function chooseBodyText(plainText, htmlText) {
@@ -69,9 +69,20 @@ export function chooseBodyText(plainText, htmlText) {
   return normalizedHtml || normalizedPlain;
 }
 
+async function readPartBody(part, messageId, headers) {
+  if (part?.body?.data) return part.body.data;
+  if (!part?.body?.attachmentId) return "";
+  const attachmentId = encodeURIComponent(part.body.attachmentId);
+  const data = await gmailFetch(
+    `https://gmail.googleapis.com/gmail/v1/users/me/messages/${encodeURIComponent(messageId)}/attachments/${attachmentId}`,
+    headers
+  );
+  return data.data || "";
+}
+
 function findPart(part, mimeType) {
   if (!part) return null;
-  if (part.mimeType === mimeType && part.body?.data) return part;
+  if (part.mimeType === mimeType && (part.body?.data || part.body?.attachmentId)) return part;
   for (const child of part.parts || []) {
     const found = findPart(child, mimeType);
     if (found) return found;
@@ -94,6 +105,7 @@ function decodeBody(value, charset = "utf-8") {
   }
 }
 export function htmlToText(html) {
+  if (typeof DOMParser === "undefined") return htmlToTextFallback(html);
   const documentNode = new DOMParser().parseFromString(html, "text/html");
   documentNode.querySelectorAll("script, style, noscript").forEach((element) => element.remove());
   documentNode.querySelectorAll("a[href]").forEach((anchor) => {
@@ -110,4 +122,28 @@ export function htmlToText(html) {
     .replace(/[ \t]+\n/g, "\n")
     .replace(/\n{3,}/g, "\n\n")
     .trim();
+}
+
+function htmlToTextFallback(html) {
+  return String(html)
+    .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, "")
+    .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, "")
+    .replace(/<a\b[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi, (_, href, label) =>
+      `[${stripTags(label).trim()}](${href})`)
+    .replace(/<(?:br|\/tr|\/td|\/th|\/p|\/div|\/li|\/h[1-4])\b[^>]*>/gi, "\n")
+    .replace(/<[^>]+>/g, "")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/&quot;/gi, "\"")
+    .replace(/&#39;/gi, "'")
+    .replace(/\r/g, "")
+    .replace(/[ \t]+\n/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+function stripTags(value) {
+  return String(value).replace(/<[^>]+>/g, "");
 }

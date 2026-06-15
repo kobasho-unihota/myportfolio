@@ -1,0 +1,36 @@
+{
+  "message": {
+    "id": "gmail-rakuten-attachment",
+    "threadId": "gmail-rakuten-attachment",
+    "internalDate": "1781084838000",
+    "payload": {
+      "mimeType": "multipart/alternative",
+      "headers": [
+        {
+          "name": "From",
+          "value": "travel@mail.travel.rakuten.co.jp"
+        },
+        {
+          "name": "Subject",
+          "value": "「楽天トラベル」予約完了メール (チェックイン日：07/29)"
+        }
+      ],
+      "parts": [
+        {
+          "mimeType": "text/plain",
+          "headers": [
+            {
+              "name": "Content-Type",
+              "value": "text/plain; charset=UTF-8"
+            }
+          ],
+          "body": {
+            "attachmentId": "rakuten-plain-body",
+            "size": 10240
+          }
+        }
+      ]
+    }
+  },
+  "attachmentText": "ご予約内容\n予約受付番号\nRYTEST3003\nホテル名\nテストホテル福岡\n住所\n〒812-0012 福岡県福岡市博多区博多駅東1-1\n宿泊施設電話番号\n092-123-4567\nチェックイン\n2026-07-29(水) 20:00\nチェックアウト\n2026-07-31(金)\n部屋タイプ\n禁煙ダブルルーム\n宿泊プラン\n朝食付プラン\n差引支払額 消費税込: 24000円\n[予約確認ページ](https://example.test/rakuten/manage/RYTEST3003)"
+}

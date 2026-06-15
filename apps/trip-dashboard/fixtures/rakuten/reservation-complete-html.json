@@ -1,0 +1,8 @@
+{
+  "id": "rakuten-complete-html",
+  "from": "travel@mail.travel.rakuten.co.jp",
+  "subject": "「楽天トラベル」予約完了メール (チェックイン日：08/05)",
+  "receivedAt": "2026-06-10T09:47:18.000Z",
+  "html": "<html><body><table><tr><th>予約受付番号</th><td>RYTEST2002</td></tr><tr><th>ホテル名</th><td>テストホテル大阪</td></tr><tr><th>住所</th><td>〒530-0001 大阪府大阪市北区梅田1-1</td></tr><tr><th>宿泊施設電話番号</th><td>06-1234-5678</td></tr><tr><th>チェックイン</th><td>2026-08-05(水) 18:00</td></tr><tr><th>チェックアウト</th><td>2026-08-07(金)</td></tr><tr><th>部屋タイプ</th><td>禁煙ツインルーム</td></tr><tr><th>差引支払額</th><td>28000円</td></tr></table><a href=\"https://example.test/rakuten/manage/RYTEST2002\">予約確認ページ</a></body></html>",
+  "normalizedBody": "予約受付番号\nRYTEST2002\nホテル名\nテストホテル大阪\n住所\n〒530-0001 大阪府大阪市北区梅田1-1\n宿泊施設電話番号\n06-1234-5678\nチェックイン\n2026-08-05(水) 18:00\nチェックアウト\n2026-08-07(金)\n部屋タイプ\n禁煙ツインルーム\n差引支払額\n28000円\n[予約確認ページ](https://example.test/rakuten/manage/RYTEST2002)"
+}

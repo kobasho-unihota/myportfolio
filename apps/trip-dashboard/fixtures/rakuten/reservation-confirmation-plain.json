@@ -1,0 +1,7 @@
+{
+  "id": "rakuten-confirmation-plain",
+  "from": "travel@mail.travel.rakuten.co.jp",
+  "subject": "「楽天トラベル」予約確認メール",
+  "receivedAt": "2026-07-28T01:01:39.000Z",
+  "body": "ご予約内容\n予約番号\nRYTEST1001\n宿泊施設名\nテストホテル東京\n宿泊施設住所\n〒100-0001 東京都千代田区千代田1-1\n宿泊施設電話番号\n03-1234-5678\nチェックイン日時\n2026-07-29(水) 22:30\nチェックアウト日\n2026-07-31(金)\n部屋タイプ\n禁煙クイーンルーム\n宿泊プラン名\n朝食付プラン\n差引支払額\n34650 円\nご予約の詳細確認や日程の変更、キャンセルは[予約確認ページ](https://example.test/rakuten/manage/RYTEST1001)からお願いします。"
+}

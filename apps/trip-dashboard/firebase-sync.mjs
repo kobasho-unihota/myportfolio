@@ -17,6 +17,7 @@ import {
   setDoc,
   writeBatch,
 } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-firestore.js";
+import { buildProviderReplacementOperations } from "./core.mjs?v=9";
 
 const firebaseConfig = {
   apiKey: "AIzaSyDdRlINBq1fdFbfKKkl5dQQM6rlWAKM9vo",
@@ -97,7 +98,10 @@ export const cloudSync = {
     return hiddenBookings.length;
   },
   async replaceHotelBookings(nextHotels) {
-    await replaceProviderBookings("楽天トラベル", nextHotels);
+    if (!nextHotels.length) {
+      throw new Error("解析ホテルが0件のため、既存ホテル予約は変更しません。");
+    }
+    await replaceProviderBookings("楽天トラベル", nextHotels, { preserveExistingOnEmpty: true });
   },
   async replaceFlightBookings(nextFlights) {
     await replaceProviderBookings("JAL", nextFlights);
@@ -142,25 +146,9 @@ function settingsRef() {
 function ensureUser() {
   if (!currentUser) throw new Error("Googleログインが必要です。");
 }
-async function replaceProviderBookings(providerName, nextBookings) {
+async function replaceProviderBookings(providerName, nextBookings, options = {}) {
   ensureUser();
-  const nextIds = new Set(nextBookings.map((booking) => booking.id));
-  const operations = [
-    ...bookings
-      .filter((booking) => booking.provider === providerName && !nextIds.has(booking.id))
-      .map((booking) => ({ type: "delete", id: booking.id })),
-    ...nextBookings.map((booking) => {
-      const current = bookings.find((item) => item.id === booking.id);
-      return {
-        type: "set",
-        booking: {
-          ...booking,
-          overrides: current?.overrides || booking.overrides || {},
-          hidden: current?.hidden || false,
-        },
-      };
-    }),
-  ];
+  const operations = buildProviderReplacementOperations(bookings, providerName, nextBookings, options);
   for (let index = 0; index < operations.length; index += 400) {
     const batch = writeBatch(db);
     operations.slice(index, index + 400).forEach((operation) => {

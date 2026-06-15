@@ -10,10 +10,10 @@
   <meta name="apple-mobile-web-app-title" content="TripBoard">
   <meta name="format-detection" content="telephone=no">
   <title>TripBoard | 出張予約</title>
-  <link rel="manifest" href="./site.webmanifest?v=8">
+  <link rel="manifest" href="./site.webmanifest?v=9">
   <link rel="icon" href="./icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="./apple-touch-icon.png">
-  <link rel="stylesheet" href="./styles.css?v=8">
+  <link rel="stylesheet" href="./styles.css?v=9">
 </head>
 <body>
   <div class="app-shell">
@@ -71,6 +71,7 @@
         <button class="primary-button sync-main-button" id="syncNowButton" type="button">Gmailから更新する</button>
         <button class="secondary-button sync-main-button" id="rescanAllButton" type="button">全予約を完全再取得</button>
         <p class="sync-note">日付や便情報が正しくない場合に使用します。JALと楽天トラベルの予約・変更・取消メールを再集計します。</p>
+        <p class="sync-note" id="syncDiagnostics">楽天メール・本文取得・ホテル解析の件数をここに表示します。</p>
         <div class="progress-card" id="syncProgress" hidden>
           <strong id="syncProgressTitle">メールを検索中</strong>
           <div><span id="syncProgressBar"></span></div>
@@ -142,6 +143,6 @@
   </dialog>
 
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
-  <script type="module" src="./app.mjs?v=8"></script>
+  <script type="module" src="./app.mjs?v=9"></script>
 </body>
 </html>
