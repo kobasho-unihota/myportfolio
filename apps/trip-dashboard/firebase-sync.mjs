@@ -17,7 +17,11 @@ import {
   setDoc,
   writeBatch,
 } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-firestore.js";
-import { buildProviderReplacementOperations } from "./core.mjs?v=11";
+import {
+  getFunctions,
+  httpsCallable,
+} from "https://www.gstatic.com/firebasejs/11.10.0/firebase-functions.js";
+import { buildProviderReplacementOperations } from "./core.mjs?v=12";
 
 const firebaseConfig = {
   apiKey: "AIzaSyDdRlINBq1fdFbfKKkl5dQQM6rlWAKM9vo",
@@ -33,17 +37,22 @@ const auth = getAuth(app);
 const db = initializeFirestore(app, {
   localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }),
 });
+const functions = getFunctions(app, "asia-northeast1");
+const classifyTripEmail = httpsCallable(functions, "classifyTripEmail");
 const provider = new GoogleAuthProvider();
 provider.setCustomParameters({ prompt: "select_account" });
 
 let currentUser = null;
 let accessToken = "";
 let bookings = [];
+let aiAnalyses = [];
 let settings = defaultSettings();
 let callback = () => {};
 let unsubscribeBookings = null;
+let unsubscribeAnalyses = null;
 let unsubscribeSettings = null;
 let bookingsReady = false;
+let analysesReady = false;
 let settingsReady = false;
 
 export const cloudSync = {
@@ -73,6 +82,25 @@ export const cloudSync = {
   async saveBooking(booking) {
     ensureUser();
     await setDoc(doc(bookingsRef(), booking.id), booking);
+  },
+  async saveAnalysis(analysis) {
+    ensureUser();
+    await setDoc(doc(analysesRef(), analysis.messageId), analysis, { merge: true });
+  },
+  async saveAnalyses(nextAnalyses) {
+    ensureUser();
+    for (let index = 0; index < nextAnalyses.length; index += 400) {
+      const batch = writeBatch(db);
+      nextAnalyses.slice(index, index + 400).forEach((analysis) => {
+        batch.set(doc(analysesRef(), analysis.messageId), analysis, { merge: true });
+      });
+      await batch.commit();
+    }
+  },
+  async classifyTripEmail(payload) {
+    ensureUser();
+    const result = await classifyTripEmail(payload);
+    return result.data;
   },
   async deleteBooking(id) {
     ensureUser();
@@ -115,10 +143,13 @@ onAuthStateChanged(auth, (user) => {
 
 function startListeners() {
   unsubscribeBookings?.();
+  unsubscribeAnalyses?.();
   unsubscribeSettings?.();
   bookings = [];
+  aiAnalyses = [];
   settings = defaultSettings();
   bookingsReady = false;
+  analysesReady = false;
   settingsReady = false;
   if (!currentUser) {
     emit("signed-out");
@@ -128,17 +159,25 @@ function startListeners() {
   unsubscribeBookings = onSnapshot(bookingsRef(), (snapshot) => {
     bookings = snapshot.docs.map((item) => item.data());
     bookingsReady = true;
-    emit(bookingsReady && settingsReady ? "synced" : "syncing");
+    emit(bookingsReady && analysesReady && settingsReady ? "synced" : "syncing");
+  }, (error) => emit("error", error));
+  unsubscribeAnalyses = onSnapshot(analysesRef(), (snapshot) => {
+    aiAnalyses = snapshot.docs.map((item) => item.data());
+    analysesReady = true;
+    emit(bookingsReady && analysesReady && settingsReady ? "synced" : "syncing");
   }, (error) => emit("error", error));
   unsubscribeSettings = onSnapshot(settingsRef(), (snapshot) => {
     settings = { ...defaultSettings(), ...(snapshot.exists() ? snapshot.data() : {}) };
     settingsReady = true;
-    emit(bookingsReady && settingsReady ? "synced" : "syncing");
+    emit(bookingsReady && analysesReady && settingsReady ? "synced" : "syncing");
   }, (error) => emit("error", error));
 }
 
 function bookingsRef() {
   return collection(db, "users", currentUser.uid, "tripDashboard", "bookings", "items");
+}
+function analysesRef() {
+  return collection(db, "users", currentUser.uid, "tripDashboard", "aiAnalyses", "items");
 }
 function settingsRef() {
   return doc(db, "users", currentUser.uid, "tripDashboard", "settings");
@@ -166,7 +205,7 @@ function emit(status, error = null) {
   callback({
     status,
     user: currentUser,
-    state: { bookings, settings },
+    state: { bookings, aiAnalyses, settings },
     error: error ? { code: String(error.code || ""), message: String(error.message || error) } : null,
   });
 }
