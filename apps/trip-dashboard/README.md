@@ -1,25 +1,27 @@
 # TripBoard
 
-GmailのJAL国内線・楽天トラベル予約メールを読み込み、出張単位でまとめるiPhone向けPWAです。
+Gmailに届く出張予約メールを解析し、航空券・ホテルを別々に保持したうえで出張単位にまとめるiPhone向けPWAです。
 
-詳細は [アプリ仕様書](./SPEC.md) を参照してください。
+公開URLは既存どおり次を維持します。
+
+```text
+https://kobasho-unihota.github.io/myportfolio/apps/trip-dashboard/
+```
+
+## 方針
+
+- GitHub Pagesで配信できる静的PWA
+- iPhone優先のカードUI
+- parser registryで航空会社・ホテル予約サイトを追加しやすくする
+- parserは直接Bookingにせず、ParseResultを経由する
+- 解析できないメールはUnclassifiedMessageとして要確認に残す
 
 ## 開発
 
 ```bash
 python3 -m http.server 4173
-node --test trip-dashboard/core.test.mjs trip-dashboard/gmail.test.mjs
+node --test apps/trip-dashboard/test/*.test.mjs
+node --test apps/trip-dashboard/core.test.mjs apps/trip-dashboard/gmail.test.mjs
 ```
 
-`http://localhost:4173/trip-dashboard/` を開きます。
-
-## Firebase
-
-既存の `seed-note-kobasho` Firebaseプロジェクトを使用します。Firestoreルールでは、ログインユーザー本人に次のパスの読み書きを許可してください。
-
-```text
-users/{uid}/tripDashboard/bookings/items/{bookingId}
-users/{uid}/tripDashboard/settings
-```
-
-Google認証プロバイダとGmail APIを有効化し、OAuth同意画面のテストユーザーに利用者本人を追加します。
+`http://localhost:4173/apps/trip-dashboard/` を開きます。
