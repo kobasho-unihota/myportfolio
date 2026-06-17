@@ -20,7 +20,8 @@ export function clearGeminiApiKey() {
 
 export async function classifyTripEmailWithGemini({ apiKey, message, body, sourceHash }) {
   if (!apiKey) throw new Error("設定画面からGemini APIキーを登録してください。");
-  if (!message?.id || !body) throw new Error("AI解析に必要なメール本文がありません。");
+  const messageId = message?.id || message?.messageId;
+  if (!messageId || !body) throw new Error("AI解析に必要なメール本文がありません。");
   const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${encodeURIComponent(apiKey)}`, {
     method: "POST",
     headers: { "content-type": "application/json" },
@@ -47,7 +48,7 @@ export async function classifyTripEmailWithGemini({ apiKey, message, body, sourc
     return {
       analysis: {
         ...JSON.parse(text),
-        messageId: message.id,
+        messageId,
         threadId: message.threadId || "",
         subject: message.subject || "",
         from: message.from || "",
@@ -64,7 +65,7 @@ export async function classifyTripEmailWithGemini({ apiKey, message, body, sourc
 }
 
 function promptFor(message, body) {
-  return `あなたは個人用PWA TripBoard のために、日本語の出張予約メールを分類・構造化します。
+  return `あなたは個人用PWA TripBoard のために、ユーザーが貼り付けた日本語の出張予約メール本文を分類・構造化します。
 返答はJSONオブジェクトのみ。Markdownや説明文は禁止。
 
 カテゴリ:
@@ -83,12 +84,12 @@ function promptFor(message, body) {
 - hotel.addressには住所だけを入れる。郵便番号や住所をhotel.nameへ混ぜない。
 - statusはconfirmedまたはcancelled。
 
-メール:
+メールメタ情報。空欄の場合は本文だけを根拠にする:
 From: ${message.from || ""}
 Subject: ${message.subject || ""}
 ReceivedAt: ${message.receivedAt || ""}
 
-本文:
+貼り付け本文:
 ${String(body || "").slice(0, 24000)}`;
 }
 

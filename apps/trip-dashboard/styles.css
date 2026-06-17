@@ -25,10 +25,10 @@ body {
   -webkit-font-smoothing: antialiased;
   -webkit-tap-highlight-color: transparent;
 }
-button, input, select { font: inherit; }
-button, a, input, select, label { touch-action: manipulation; }
+button, input, select, textarea { font: inherit; }
+button, a, input, select, textarea, label { touch-action: manipulation; }
 button { cursor: pointer; }
-button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible {
+button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible, a:focus-visible {
   outline: 3px solid rgba(47, 128, 237, .24);
   outline-offset: 2px;
 }
@@ -176,6 +176,38 @@ h2 { margin-bottom: 0; font-size: 25px; }
 .sync-view { padding: 72px 20px; text-align: center; }
 .sync-view h1 { margin-bottom: 16px; }
 .sync-view > p:not(.eyebrow) { max-width: 470px; margin: 0 auto 24px; color: var(--muted); font-size: 12px; line-height: 1.8; }
+.paste-panel {
+  max-width: 620px;
+  margin: 0 auto;
+  padding: 18px;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: #fff;
+  text-align: left;
+  box-shadow: 0 8px 30px rgba(16,42,67,.05);
+}
+.field textarea {
+  width: 100%;
+  min-height: 240px;
+  padding: 13px 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #fff;
+  color: var(--text);
+  line-height: 1.55;
+  resize: vertical;
+}
+.paste-actions {
+  position: sticky;
+  bottom: calc(77px + env(safe-area-inset-bottom));
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 9px;
+  margin-top: 14px;
+  padding-top: 10px;
+  background: linear-gradient(to bottom, rgba(255,255,255,.75), #fff 28%);
+}
+.paste-actions .primary-button { grid-column: 1 / -1; }
 .sync-orbit { position: relative; width: 126px; height: 126px; margin: 0 auto 28px; border: 1px solid #cfdfed; border-radius: 50%; }
 .sync-orbit::before { content: ""; position: absolute; inset: 18px; border: 1px dashed #bfd3e5; border-radius: 50%; }
 .orbit-plane { position: absolute; left: 48px; top: -13px; display: grid; place-items: center; width: 30px; height: 30px; border-radius: 50%; background: var(--blue); color: #fff; }
@@ -194,7 +226,7 @@ h2 { margin-bottom: 0; font-size: 25px; }
 .sync-diagnostics p { margin: 0; color: var(--muted); font-size: 10px; line-height: 1.6; overflow-wrap: anywhere; }
 .candidate-list, .review-list { display: flex; flex-direction: column; gap: 10px; margin-top: 16px; text-align: left; }
 .candidate-list { max-width: 520px; margin-left: auto; margin-right: auto; }
-.candidate-card, .review-card {
+.candidate-card, .review-card, .trip-candidate-card {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
   gap: 12px;
@@ -207,15 +239,15 @@ h2 { margin-bottom: 0; font-size: 25px; }
 .candidate-card input { width: 19px; height: 19px; accent-color: var(--blue); }
 .candidate-card.cached { background: #f5f8fb; color: var(--muted); }
 .candidate-copy { min-width: 0; }
-.candidate-copy strong, .review-card strong {
+.candidate-copy strong, .review-card strong, .trip-candidate-card strong {
   display: block;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: var(--ink);
+  color: var(--text);
   font-size: 12px;
 }
-.candidate-copy small, .candidate-copy em, .review-card p {
+.candidate-copy small, .candidate-copy em, .review-card p, .trip-candidate-card p {
   display: block;
   margin-top: 4px;
   color: var(--muted);
@@ -225,6 +257,7 @@ h2 { margin-bottom: 0; font-size: 25px; }
 }
 .review-panel { margin: 18px 0; }
 .review-card { grid-template-columns: minmax(0, 1fr) auto; }
+.trip-candidate-card { grid-template-columns: minmax(0, 1fr) auto; }
 .review-actions { display: flex; align-items: center; gap: 6px; }
 .review-actions span {
   padding: 6px 8px;
@@ -304,6 +337,10 @@ h2 { margin-bottom: 0; font-size: 25px; }
   .trip-list { grid-template-columns: 1fr; }
   .booking-card { grid-template-columns: 43px minmax(0, 1fr) auto; gap: 10px; padding: 14px; }
   .sync-view { padding: 54px 5px; }
+  .paste-panel { padding: 14px; border-radius: 16px; }
+  .field textarea { min-height: 310px; font-size: 16px; }
+  .paste-actions { grid-template-columns: 1fr; }
+  .paste-actions .primary-button { grid-column: auto; }
   .form-grid { grid-template-columns: 1fr; }
   .field-wide { grid-column: auto; }
   .app-dialog form { padding: 21px; }

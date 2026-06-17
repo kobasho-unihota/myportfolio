@@ -1,107 +1,66 @@
-import { analysesToBookings, analysisNeedsReview, cacheMatches, hashMessageSource, makeFailedAnalysis, normalizeAnalysis, travelCandidateQuery, validateAnalysis } from "./ai-core.mjs?v=16";
-import { bookingWarnings, effectiveBooking, groupTrips, mergeBookings } from "./core.mjs?v=14";
-import { fetchTravelMessages } from "./gmail.mjs?v=12";
-import { classifyTripEmailWithGemini, clearGeminiApiKey, getGeminiApiKey, saveGeminiApiKey } from "./gemini-client.mjs?v=14";
-import { cloudSync } from "./firebase-sync.mjs?v=15";
+import {
+  analysesToBookings,
+  analysisNeedsReview,
+  makeFailedManualAnalysis,
+  makeManualMessage,
+  normalizeAnalysis,
+  validateAnalysis,
+} from "./ai-core.mjs?v=17";
+import { bookingWarnings, effectiveBooking, mergeBookings } from "./core.mjs?v=14";
+import { classifyTripEmailWithGemini, clearGeminiApiKey, getGeminiApiKey, saveGeminiApiKey } from "./gemini-client.mjs?v=17";
+import { clearTripBoardData, loadTripBoardState, saveTripBoardState } from "./local-store.mjs?v=17";
 
 const state = {
-  user: null,
-  bookings: [],
-  aiAnalyses: [],
-  candidateMessages: [],
-  selectedMessageIds: new Set(),
-  settings: { homeAirport: "福岡", lastSyncedAt: "" },
-  syncStatus: "loading",
+  ...loadTripBoardState(),
+  pasteDraft: { subject: "", from: "", receivedAt: "", body: "" },
   bookingFilter: "active",
+  isAnalyzing: false,
 };
 const demoMode = new URLSearchParams(location.search).has("demo");
 const dateTime = new Intl.DateTimeFormat("ja-JP", { month: "numeric", day: "numeric", weekday: "short", hour: "2-digit", minute: "2-digit" });
 const dateOnly = new Intl.DateTimeFormat("ja-JP", { month: "long", day: "numeric", weekday: "short" });
-const currency = new Intl.NumberFormat("ja-JP", { style: "currency", currency: "JPY", maximumFractionDigits: 0 });
-
 const elements = Object.fromEntries([...document.querySelectorAll("[id]")].map((element) => [element.id, element]));
 
-cloudSync.subscribe((snapshot) => {
-  state.user = snapshot.user;
-  state.syncStatus = snapshot.status;
-  if (snapshot.status === "synced" || snapshot.status === "syncing") {
-    state.bookings = snapshot.state.bookings || [];
-    state.aiAnalyses = snapshot.state.aiAnalyses || [];
-    state.settings = { ...state.settings, ...snapshot.state.settings };
-  }
-  if (demoMode && !state.bookings.length) state.bookings = demoBookings();
-  updateAuthUI(snapshot.error);
-  render();
-});
+if (demoMode && !state.bookings.length) {
+  state.bookings = demoBookings();
+  persist();
+}
 
-document.querySelectorAll("[data-view]").forEach((button) => {
-  button.addEventListener("click", () => showView(button.dataset.view));
+bind("[data-view]", "click", (event, button) => showView(button.dataset.view));
+bind("[data-filter]", "click", (event, button) => {
+  state.bookingFilter = button.dataset.filter;
+  document.querySelectorAll("[data-filter]").forEach((item) => item.classList.toggle("active", item === button));
+  renderBookings();
 });
-document.querySelectorAll("[data-filter]").forEach((button) => {
-  button.addEventListener("click", () => {
-    state.bookingFilter = button.dataset.filter;
-    document.querySelectorAll("[data-filter]").forEach((item) => item.classList.toggle("active", item === button));
-    renderBookings();
-  });
-});
-document.querySelectorAll("[data-close]").forEach((button) => button.addEventListener("click", () => elements.bookingDialog.close()));
+bind("[data-close]", "click", () => elements.bookingDialog.close());
 
-elements.heroSyncButton.addEventListener("click", () => showView("sync"));
-elements.syncNowButton.addEventListener("click", searchCandidateEmails);
-elements.rescanAllButton.addEventListener("click", analyzeSelectedEmails);
-elements.accountButton.addEventListener("click", handleAccount);
-elements.accountSettingsButton.addEventListener("click", handleAccount);
-elements.addBookingButton.addEventListener("click", () => openBookingDialog());
-elements.bookingType.addEventListener("change", updateBookingFields);
-elements.bookingForm.addEventListener("submit", saveBooking);
-elements.saveSettingsButton.addEventListener("click", saveSettings);
-elements.saveGeminiKeyButton.addEventListener("click", saveGeminiKey);
-elements.clearGeminiKeyButton.addEventListener("click", clearGeminiKey);
-elements.resetHiddenButton.addEventListener("click", resetHiddenBookings);
-elements.clearImportedDataButton.addEventListener("click", clearImportedData);
-elements.bookingList.addEventListener("click", handleBookingAction);
-elements.candidateList.addEventListener("change", handleCandidateSelection);
-elements.reviewList.addEventListener("click", handleReviewAction);
+listen(elements.heroSyncButton, "click", () => showView("sync"));
+listen(elements.analyzePasteButton, "click", analyzePastedEmail);
+listen(elements.clearPasteButton, "click", clearPasteDraft);
+listen(elements.retryFailedButton, "click", retryFailedAnalyses);
+listen(elements.accountButton, "click", () => showView("settings"));
+listen(elements.addBookingButton, "click", () => openBookingDialog());
+listen(elements.bookingType, "change", updateBookingFields);
+listen(elements.bookingForm, "submit", saveBooking);
+listen(elements.saveSettingsButton, "click", saveSettings);
+listen(elements.saveGeminiKeyButton, "click", saveGeminiKey);
+listen(elements.clearGeminiKeyButton, "click", clearGeminiKey);
+listen(elements.resetHiddenButton, "click", resetHiddenBookings);
+listen(elements.clearImportedDataButton, "click", clearImportedData);
+listen(elements.bookingList, "click", handleBookingAction);
+listen(elements.reviewList, "click", handleReviewAction);
+listen(elements.tripCandidateList, "click", handleTripAction);
 
 elements.todayLabel.textContent = new Intl.DateTimeFormat("ja-JP", {
   year: "numeric", month: "long", day: "numeric", weekday: "long",
 }).format(new Date());
 
-async function handleAccount() {
-  try {
-    if (state.user) await cloudSync.signOut();
-    else await cloudSync.signIn();
-  } catch (error) {
-    showToast(readableError(error));
-  }
-}
+render();
 
-async function searchCandidateEmails() {
-  try {
-    setSyncing(true);
-    const token = await cloudSync.authorizeGmail();
-    const messages = await fetchTravelMessages(token, travelCandidateQuery(new Date()), updateProgress);
-    for (const message of messages) {
-      message.sourceHash = await hashMessageSource(message);
-    }
-    state.candidateMessages = messages;
-    state.selectedMessageIds = new Set(messages
-      .filter((message) => !state.aiAnalyses.some((analysis) => cacheMatches(analysis, message)))
-      .map((message) => message.id));
-    reportAiDiagnostics();
-    renderCandidates();
-    showToast(`${messages.length}件の候補メールを取得しました`);
-  } catch (error) {
-    showToast(error.status === 401 ? "認証期限が切れました。もう一度更新してください。" : readableError(error));
-  } finally {
-    setSyncing(false);
-  }
-}
-
-async function analyzeSelectedEmails() {
-  const selected = state.candidateMessages.filter((message) => state.selectedMessageIds.has(message.id));
-  if (!selected.length) {
-    showToast("AI解析するメールを選択してください");
+async function analyzePastedEmail() {
+  const body = elements.pasteBody.value.trim();
+  if (!body) {
+    showToast("メール本文を貼り付けてください");
     return;
   }
   const apiKey = getGeminiApiKey();
@@ -110,88 +69,109 @@ async function analyzeSelectedEmails() {
     showView("settings");
     return;
   }
+  const message = makeManualMessage({
+    subject: elements.pasteSubject.value,
+    from: elements.pasteFrom.value,
+    receivedAt: elements.pasteReceivedAt.value,
+    body,
+  });
+  await analyzeManualMessage(message, apiKey);
+}
+
+async function analyzeManualMessage(message, apiKey = getGeminiApiKey()) {
   try {
-    setSyncing(true, true);
-    const analyses = [];
-    for (let index = 0; index < selected.length; index += 1) {
-      const message = selected[index];
-      updateProgress({ phase: "analyze", current: index, total: selected.length });
-      const cached = state.aiAnalyses.find((analysis) => cacheMatches(analysis, message));
-      if (cached) {
-        analyses.push(cached);
-        continue;
-      }
-      try {
-        const response = await classifyTripEmailWithGemini({
-          apiKey,
-          message: publicMessage(message),
-          body: message.body,
-          sourceHash: message.sourceHash,
-        });
-        const analysis = normalizeAnalysis(response.analysis || response, message, {
-          sourceHash: message.sourceHash,
-          model: response.model || "",
-        });
-        const validation = validateAnalysis(analysis);
-        analyses.push(validation.ok ? validation.analysis : {
-          ...validation.analysis,
-          status: "failed",
-          issues: [...validation.analysis.issues, ...validation.errors],
-        });
-      } catch (error) {
-        analyses.push(makeFailedAnalysis(message, error, message.sourceHash));
-      }
+    setAnalyzing(true, "AIで分類しています");
+    const response = await classifyTripEmailWithGemini({
+      apiKey,
+      message,
+      body: message.body,
+      sourceHash: message.sourceHash,
+    });
+    let analysis = normalizeAnalysis(response.analysis || response, message, {
+      sourceHash: message.sourceHash,
+      model: response.model || "",
+    });
+    const validation = validateAnalysis(analysis);
+    if (!validation.ok) {
+      analysis = {
+        ...validation.analysis,
+        status: "needs_review",
+        issues: [...new Set([...validation.analysis.issues, ...validation.errors])],
+      };
     }
-    updateProgress({ phase: "analyze", current: selected.length, total: selected.length });
-    await cloudSync.saveAnalyses(analyses);
-    const nextBookings = analysesToBookings(analyses.filter((analysis) =>
-      !analysisNeedsReview(analysis) || analysis.status === "approved"));
-    const merged = mergeBookings(state.bookings, nextBookings);
-    const changed = merged.filter((next) => JSON.stringify(state.bookings.find((item) => item.id === next.id)) !== JSON.stringify(next));
-    updateProgress({ phase: "save", current: 0, total: changed.length });
-    for (let index = 0; index < changed.length; index += 1) {
-      await cloudSync.saveBooking(changed[index]);
-      updateProgress({ phase: "save", current: index + 1, total: changed.length });
-    }
-    await cloudSync.saveSettings({ ...state.settings, lastSyncedAt: new Date().toISOString() });
-    state.selectedMessageIds.clear();
-    reportAiDiagnostics(analyses);
-    renderCandidates();
-    showToast(`AI解析${analyses.length}件、予約反映${changed.length}件`);
+    upsertAnalysis(analysis);
+    const reflected = reflectApprovedAnalyses([analysis]);
+    state.settings.lastAnalyzedAt = new Date().toISOString();
+    persist();
+    render();
+    showToast(reflected ? "AI解析して予約に反映しました" : "AI解析結果を要確認に保存しました");
   } catch (error) {
-    showToast(error.status === 401 ? "認証期限が切れました。もう一度実行してください。" : readableError(error));
+    const failed = makeFailedManualAnalysis(message, error, message.sourceHash);
+    upsertAnalysis(failed);
+    state.settings.lastAnalyzedAt = new Date().toISOString();
+    persist();
+    render();
+    showToast("AI解析に失敗しました。本文を保存したので再解析できます。");
   } finally {
-    setSyncing(false, true);
+    setAnalyzing(false);
   }
 }
 
-function updateProgress(progress) {
-  const labels = { search: "候補メールを検索中", read: "メール本文を取得中", analyze: "AIで分類中", save: "予約を保存中" };
-  elements.syncProgressTitle.textContent = labels[progress.phase] || "更新中";
-  const ratio = progress.total ? Math.min(100, Math.round(progress.current / progress.total * 100)) : 12;
-  elements.syncProgressBar.style.width = `${ratio}%`;
-  elements.syncProgressText.textContent = progress.total ? `${progress.current} / ${progress.total}件` : `${progress.current}件見つかりました`;
+async function retryFailedAnalyses() {
+  const failed = state.aiAnalyses.filter((analysis) => analysis.status === "failed" && analysis.rawBody);
+  const apiKey = getGeminiApiKey();
+  if (!failed.length) return showToast("再解析できる失敗データはありません");
+  if (!apiKey) {
+    showToast("設定画面からGemini APIキーを登録してください");
+    showView("settings");
+    return;
+  }
+  for (const analysis of failed) {
+    const message = makeManualMessage({
+      subject: analysis.subject,
+      from: analysis.from,
+      receivedAt: analysis.receivedAt,
+      body: analysis.rawBody,
+    });
+    await analyzeManualMessage(message, apiKey);
+  }
 }
 
-function reportAiDiagnostics(latest = []) {
-  const analyses = latest.length ? latest : state.aiAnalyses;
-  elements.rakutenSearchCount.textContent = String(state.candidateMessages.length || "-");
-  elements.rakutenBodyCount.textContent = String(state.candidateMessages.filter((message) => message.body).length || "-");
-  elements.rakutenParsedCount.textContent = String(analyses.filter((analysis) => ["flight", "hotel"].includes(analysis.category)).length || "-");
-  elements.rakutenFailureCount.textContent = String(analyses.filter(analysisNeedsReview).length || "-");
-  const summary = analyses.length
-    ? analyses.slice(0, 4).map((item) => `${categoryLabel(item.category)} ${Math.round(item.confidence * 100)}%: ${item.subject || "件名なし"}`).join(" / ")
-    : "候補メールを取得するとAI分類結果を表示します。";
-  elements.rakutenFailureExamples.textContent = summary;
+function reflectApprovedAnalyses(analyses) {
+  const nextBookings = analysesToBookings(analyses.filter((analysis) =>
+    ["flight", "hotel"].includes(analysis.category) && (!analysisNeedsReview(analysis) || analysis.status === "approved")));
+  if (!nextBookings.length) return false;
+  state.bookings = mergeBookings(state.bookings, nextBookings).map((booking) => {
+    const current = state.bookings.find((item) => item.id === booking.id);
+    return { ...booking, tripId: current?.tripId || booking.tripId || "" };
+  });
+  return true;
 }
 
-function setSyncing(active, fullRescan = false) {
-  elements.syncNowButton.disabled = active;
-  elements.rescanAllButton.disabled = active || !state.candidateMessages.length;
-  elements.syncNowButton.textContent = active && !fullRescan ? "候補を取得しています..." : "候補メールを取得";
-  elements.rescanAllButton.textContent = active && fullRescan ? "AI解析しています..." : "選択メールをAI解析";
+function upsertAnalysis(analysis) {
+  const index = state.aiAnalyses.findIndex((item) => item.messageId === analysis.messageId);
+  if (index >= 0) state.aiAnalyses[index] = analysis;
+  else state.aiAnalyses.unshift(analysis);
+}
+
+function clearPasteDraft() {
+  elements.pasteSubject.value = "";
+  elements.pasteFrom.value = "";
+  elements.pasteReceivedAt.value = "";
+  elements.pasteBody.value = "";
+  showToast("貼り付け欄をクリアしました");
+}
+
+function setAnalyzing(active, label = "処理中") {
+  state.isAnalyzing = active;
+  elements.analyzePasteButton.disabled = active;
+  elements.clearPasteButton.disabled = active;
+  elements.retryFailedButton.disabled = active;
+  elements.analyzePasteButton.textContent = active ? "解析しています..." : "AI解析して保存";
   elements.syncProgress.hidden = !active;
-  document.querySelector(".sync-orbit").classList.toggle("running", active);
+  elements.syncProgressTitle.textContent = label;
+  elements.syncProgressBar.style.width = active ? "55%" : "0";
+  elements.syncProgressText.textContent = active ? "Geminiに本文を送信しています" : "";
 }
 
 function showView(name) {
@@ -202,24 +182,77 @@ function showView(name) {
 
 function render() {
   elements.homeAirportInput.value = state.settings.homeAirport || "福岡";
+  elements.lastSyncLabel.textContent = state.settings.lastAnalyzedAt
+    ? `最終解析 ${new Intl.DateTimeFormat("ja-JP", { dateStyle: "medium", timeStyle: "short" }).format(new Date(state.settings.lastAnalyzedAt))}`
+    : "まだ解析されていません";
   renderGeminiKeyState();
-  elements.lastSyncLabel.textContent = state.settings.lastSyncedAt
-    ? `最終更新 ${new Intl.DateTimeFormat("ja-JP", { dateStyle: "medium", timeStyle: "short" }).format(new Date(state.settings.lastSyncedAt))}`
-    : "まだ更新されていません";
+  renderLocalState();
   renderTrips();
   renderBookings();
   renderReviewItems();
-  renderCandidates();
+  renderTripCandidates();
+}
+
+function renderLocalState() {
+  const failed = state.aiAnalyses.filter((analysis) => analysis.status === "failed").length;
+  elements.accountLabel.textContent = "端末保存";
+  elements.syncDot.className = "sync-dot synced";
+  elements.connectionBanner.hidden = navigator.onLine;
+  elements.connectionMessage.textContent = "オフラインです。保存済みの予約を表示しています。";
+  elements.pasteSummary.textContent = `保存済み: 予約${state.bookings.length}件 / AI結果${state.aiAnalyses.length}件 / 失敗${failed}件`;
+  elements.retryFailedButton.hidden = failed === 0;
 }
 
 function renderTrips() {
-  const trips = groupTrips(state.bookings, state.settings);
-  const upcoming = trips.filter((trip) => Date.parse(trip.endAt) >= Date.now() - 12 * 3600000);
-  elements.nextTrip.innerHTML = upcoming[0] ? tripHero(upcoming[0]) : emptyState("次の出張はありません", "Gmailから更新すると、JALと楽天トラベルの予約をここにまとめます。", "更新画面を開く");
+  const trips = displayTrips().filter((trip) => Date.parse(trip.endAt) >= Date.now() - 12 * 3600000);
+  elements.nextTrip.innerHTML = trips[0] ? tripHero(trips[0]) : emptyState("次の出張はありません", "メール本文を貼り付けてAI解析すると、予約がここに表示されます。", "メールを貼り付ける");
   elements.nextTrip.querySelector("[data-open-sync]")?.addEventListener("click", () => showView("sync"));
-  elements.upcomingTrips.innerHTML = upcoming.slice(1, 5).length
-    ? upcoming.slice(1, 5).map(tripMini).join("")
-    : `<div class="empty-state"><strong>その次の予定はありません</strong><p>新しい予約メールを受信したら更新してください。</p></div>`;
+  elements.upcomingTrips.innerHTML = trips.slice(1, 5).length
+    ? trips.slice(1, 5).map(tripMini).join("")
+    : `<div class="empty-state"><strong>その次の予定はありません</strong><p>保存した予約を手動で同じ出張にまとめられます。</p></div>`;
+}
+
+function displayTrips() {
+  const active = state.bookings
+    .filter((booking) => !booking.hidden && booking.status !== "cancelled")
+    .map(effectiveBooking)
+    .filter((booking) => booking.data.startAt || booking.data.checkIn);
+  const byId = new Map(active.map((booking) => [booking.id, booking]));
+  const groupedIds = new Set();
+  const grouped = state.trips.map((trip) => {
+    const items = (trip.bookingIds || []).map((id) => byId.get(id)).filter(Boolean);
+    items.forEach((item) => groupedIds.add(item.id));
+    return items.length ? buildDisplayTrip(items, trip.title, trip.id) : null;
+  }).filter(Boolean);
+  const singles = active.filter((booking) => !groupedIds.has(booking.id)).map((booking) => buildDisplayTrip([booking], "", ""));
+  return [...grouped, ...singles].sort((a, b) => Date.parse(a.startAt) - Date.parse(b.startAt));
+}
+
+function buildDisplayTrip(items, title = "", id = "") {
+  const startAt = new Date(Math.min(...items.map(bookingStartMs))).toISOString();
+  const endAt = new Date(Math.max(...items.map(bookingEndMs))).toISOString();
+  return {
+    id,
+    title: title || inferTripTitle(items),
+    startAt,
+    endAt,
+    durationDays: Math.max(1, Math.ceil((bookingEndMs({ data: { checkIn: startAt, checkOut: endAt } }) - Date.parse(startAt)) / 86400000)),
+    destination: inferDestination(items),
+    items: items.sort((a, b) => bookingStartMs(a) - bookingStartMs(b)),
+  };
+}
+
+function inferTripTitle(items) {
+  const flight = items.find((item) => item.type === "flight" && item.data.destination);
+  const hotel = items.find((item) => item.type === "hotel" && item.data.name);
+  const destination = flight?.data.destination || hotel?.data.name || "未分類の出張";
+  return `${shortAirport(destination)}出張`;
+}
+
+function inferDestination(items) {
+  const flight = items.find((item) => item.type === "flight" && item.data.destination);
+  const hotel = items.find((item) => item.type === "hotel" && item.data.name);
+  return flight?.data.destination || hotel?.data.name || "";
 }
 
 function tripHero(trip) {
@@ -246,7 +279,7 @@ function tripHero(trip) {
     <article class="trip-hero">
       <div class="trip-top"><div><small>${formatDateRange(trip.startAt, trip.endAt)}</small><h2>${escapeHtml(trip.title)}</h2></div><div class="countdown">${countdown}</div></div>
       ${mainContent}
-      <div class="trip-meta"><span>${trip.durationDays}日間</span><span>${trip.items.length}件の予約</span>${data.flightNumber ? `<span>${escapeHtml(data.flightNumber)}</span>` : ""}</div>
+      <div class="trip-meta"><span>${trip.durationDays}日間</span><span>${trip.items.length}件の予約</span>${trip.id ? "<span>手動まとめ</span>" : ""}</div>
     </article>
     <div class="timeline">${trip.items.map(timelineItem).join("")}</div>
     ${warnings.length ? `<div class="warning-box"><strong>確認してください</strong><ul>${warnings.map((warning) => `<li>${escapeHtml(warning)}</li>`).join("")}</ul></div>` : ""}
@@ -274,38 +307,32 @@ function tripMini(trip) {
 }
 
 function renderBookings() {
-  const bookings = [...state.bookings].map(effectiveBooking).sort((a, b) => Date.parse(bookingDate(a)) - Date.parse(bookingDate(b)));
+  const bookings = [...state.bookings].map(effectiveBooking).sort((a, b) => bookingStartMs(a) - bookingStartMs(b));
   const filtered = bookings.filter((booking) => {
     if (state.bookingFilter === "cancelled") return booking.status === "cancelled";
-    if (state.bookingFilter === "active") return booking.status !== "cancelled" && !booking.hidden && Date.parse(bookingDate(booking)) >= Date.now() - 86400000;
+    if (state.bookingFilter === "active") return booking.status !== "cancelled" && !booking.hidden && bookingStartMs(booking) >= Date.now() - 86400000;
     return true;
   });
-  elements.bookingList.innerHTML = filtered.length ? filtered.map(bookingCard).join("") : `<div class="empty-state"><strong>該当する予約はありません</strong><p>更新するか、手動で予約を追加してください。</p></div>`;
+  elements.bookingList.innerHTML = filtered.length ? filtered.map(bookingCard).join("") : `<div class="empty-state"><strong>該当する予約はありません</strong><p>メール本文を貼り付けるか、手動で予約を追加してください。</p></div>`;
 }
 
-function renderCandidates() {
-  if (!elements.candidateList) return;
-  elements.rescanAllButton.disabled = !state.candidateMessages.length || state.syncStatus === "syncing";
-  elements.candidateList.innerHTML = state.candidateMessages.length
-    ? state.candidateMessages.map(candidateCard).join("")
-    : `<div class="empty-state"><strong>候補メールは未取得です</strong><p>まずGmailから候補を取得し、AI解析するメールを選択します。</p></div>`;
-}
-
-function candidateCard(message) {
-  const cached = state.aiAnalyses.find((analysis) => cacheMatches(analysis, message));
-  const checked = state.selectedMessageIds.has(message.id) ? "checked" : "";
-  return `<label class="candidate-card ${cached ? "cached" : ""}">
-    <input type="checkbox" value="${escapeAttribute(message.id)}" ${checked} ${cached ? "disabled" : ""}>
-    <span class="candidate-copy">
-      <strong>${escapeHtml(message.subject || "件名なし")}</strong>
-      <small>${escapeHtml(message.from || "")}</small>
-      <em>${cached ? `キャッシュ済み ${categoryLabel(cached.category)}` : dateTimeSafe(message.receivedAt)}</em>
-    </span>
-  </label>`;
+function bookingCard(booking) {
+  const data = booking.data;
+  const title = booking.type === "flight" ? `${data.flightNumber || "航空券"} ${shortAirport(data.origin)} → ${shortAirport(data.destination)}` : data.name || "ホテル";
+  const detail = booking.type === "flight" ? dateTimeSafe(data.startAt) : `${dateOnlySafe(data.checkIn)} - ${dateOnlySafe(data.checkOut)}`;
+  const grouped = Boolean(booking.tripId);
+  return `<article class="booking-card ${booking.status === "cancelled" ? "cancelled" : ""} ${booking.hidden ? "hidden-booking" : ""}">
+    <div class="item-icon ${booking.type === "hotel" ? "hotel" : ""}">${booking.type === "flight" ? flightIcon() : hotelIcon()}</div>
+    <div class="booking-copy"><strong>${escapeHtml(title)}</strong><p>${escapeHtml(detail)}</p><small>${escapeHtml(booking.provider)} ・ ${escapeHtml(data.reservationNumber || "手動登録")}</small><span class="status-badge ${booking.status === "cancelled" ? "cancelled" : ""}">${booking.status === "cancelled" ? "取消" : booking.hidden ? "非表示" : grouped ? "まとめ済み" : "未分類"}</span></div>
+    <div class="booking-actions">
+      <button class="mini-button" data-action="edit" data-id="${escapeAttribute(booking.id)}" type="button" aria-label="編集">${editIcon()}</button>
+      <button class="mini-button" data-action="${grouped ? "remove-trip" : "new-trip"}" data-id="${escapeAttribute(booking.id)}" type="button" aria-label="${grouped ? "出張から外す" : "新しい出張"}">${groupIcon()}</button>
+      <button class="mini-button" data-action="hide" data-id="${escapeAttribute(booking.id)}" type="button" aria-label="${booking.hidden ? "再表示" : "非表示"}">${eyeIcon(booking.hidden)}</button>
+    </div>
+  </article>`;
 }
 
 function renderReviewItems() {
-  if (!elements.reviewList) return;
   const reviewItems = state.aiAnalyses
     .filter(analysisNeedsReview)
     .sort((a, b) => Date.parse(b.updatedAt || 0) - Date.parse(a.updatedAt || 0));
@@ -316,20 +343,15 @@ function renderReviewItems() {
 
 function reviewCard(analysis) {
   const canApply = ["flight", "hotel"].includes(analysis.category);
+  const canRetry = analysis.status === "failed" && analysis.rawBody;
   return `<article class="review-card">
-    <div><strong>${escapeHtml(analysis.subject || "件名なし")}</strong><p>${escapeHtml(analysis.summary || analysis.issues?.[0] || "手修正または再解析が必要です。")}</p></div>
+    <div><strong>${escapeHtml(analysis.subject || "貼り付けメール")}</strong><p>${escapeHtml(analysis.summary || analysis.issues?.[0] || analysis.errorMessage || "手修正または再解析が必要です。")}</p></div>
     <div class="review-actions">
       <span>${categoryLabel(analysis.category)} ${Math.round((analysis.confidence || 0) * 100)}%</span>
+      ${canRetry ? `<button class="mini-button" data-review-action="retry" data-message-id="${escapeAttribute(analysis.messageId)}" type="button" aria-label="再解析">${refreshIcon()}</button>` : ""}
       ${canApply ? `<button class="mini-button" data-review-action="approve" data-message-id="${escapeAttribute(analysis.messageId)}" type="button" aria-label="予約へ反映">${editIcon()}</button>` : ""}
     </div>
   </article>`;
-}
-
-function handleCandidateSelection(event) {
-  const input = event.target.closest("input[type='checkbox']");
-  if (!input) return;
-  if (input.checked) state.selectedMessageIds.add(input.value);
-  else state.selectedMessageIds.delete(input.value);
 }
 
 async function handleReviewAction(event) {
@@ -337,36 +359,85 @@ async function handleReviewAction(event) {
   if (!button) return;
   const analysis = state.aiAnalyses.find((item) => item.messageId === button.dataset.messageId);
   if (!analysis) return;
+  if (button.dataset.reviewAction === "retry") {
+    const message = makeManualMessage({
+      subject: analysis.subject,
+      from: analysis.from,
+      receivedAt: analysis.receivedAt,
+      body: analysis.rawBody,
+    });
+    await analyzeManualMessage(message);
+    return;
+  }
   if (button.dataset.reviewAction === "approve") {
-    try {
-      const approved = { ...analysis, status: "approved", userReviewedAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
-      await cloudSync.saveAnalysis(approved);
-      const nextBookings = analysesToBookings([approved]);
-      for (const booking of mergeBookings(state.bookings, nextBookings)) {
-        const current = state.bookings.find((item) => item.id === booking.id);
-        if (JSON.stringify(current) !== JSON.stringify(booking)) await cloudSync.saveBooking(booking);
-      }
-      showToast("AI解析結果を予約へ反映しました。予約一覧から手修正できます。");
-    } catch (error) {
-      showToast(readableError(error));
-    }
+    const approved = { ...analysis, status: "approved", userReviewedAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
+    upsertAnalysis(approved);
+    reflectApprovedAnalyses([approved]);
+    persist();
+    render();
+    showToast("AI解析結果を予約へ反映しました。予約一覧から手修正できます。");
   }
 }
 
-function bookingCard(booking) {
-  const data = booking.data;
-  const title = booking.type === "flight" ? `${data.flightNumber || "航空券"} ${shortAirport(data.origin)} → ${shortAirport(data.destination)}` : data.name || "ホテル";
-  const detail = booking.type === "flight" ? dateTimeSafe(data.startAt) : `${dateOnlySafe(data.checkIn)} - ${dateOnlySafe(data.checkOut)}`;
-  const sourceUrl = [...(booking.source || [])].sort((a, b) => Date.parse(b.receivedAt) - Date.parse(a.receivedAt))[0]?.url;
-  return `<article class="booking-card ${booking.status === "cancelled" ? "cancelled" : ""} ${booking.hidden ? "hidden-booking" : ""}">
-    <div class="item-icon ${booking.type === "hotel" ? "hotel" : ""}">${booking.type === "flight" ? flightIcon() : hotelIcon()}</div>
-    <div class="booking-copy"><strong>${escapeHtml(title)}</strong><p>${escapeHtml(detail)}</p><small>${escapeHtml(booking.provider)} ・ ${escapeHtml(data.reservationNumber || "手動登録")}</small><span class="status-badge ${booking.status === "cancelled" ? "cancelled" : ""}">${booking.status === "cancelled" ? "取消" : booking.hidden ? "非表示" : "予約済み"}</span></div>
-    <div class="booking-actions">
-      ${sourceUrl ? `<a class="mini-button" href="${escapeAttribute(sourceUrl)}" target="_blank" rel="noreferrer" aria-label="元メール">${mailIcon()}</a>` : ""}
-      <button class="mini-button" data-action="edit" data-id="${escapeAttribute(booking.id)}" type="button" aria-label="編集">${editIcon()}</button>
-      <button class="mini-button" data-action="hide" data-id="${escapeAttribute(booking.id)}" type="button" aria-label="${booking.hidden ? "再表示" : "非表示"}">${eyeIcon(booking.hidden)}</button>
-    </div>
+function renderTripCandidates() {
+  const candidates = tripCandidates();
+  elements.tripCandidateList.innerHTML = candidates.length
+    ? candidates.map(tripCandidateCard).join("")
+    : `<div class="empty-state"><strong>まとめ候補はありません</strong><p>日付が近い未分類予約があると、ここから同じ出張にまとめられます。</p></div>`;
+}
+
+function tripCandidates() {
+  const bookings = state.bookings
+    .filter((booking) => !booking.hidden && booking.status !== "cancelled" && !booking.tripId)
+    .map(effectiveBooking)
+    .filter((booking) => booking.data.startAt || booking.data.checkIn)
+    .sort((a, b) => bookingStartMs(a) - bookingStartMs(b));
+  const candidates = [];
+  for (let i = 0; i < bookings.length; i += 1) {
+    for (let j = i + 1; j < bookings.length; j += 1) {
+      if (Math.abs(bookingStartMs(bookings[i]) - bookingStartMs(bookings[j])) <= 3 * 86400000) {
+        candidates.push({ type: "pair", bookings: [bookings[i], bookings[j]] });
+      }
+    }
+  }
+  state.trips.forEach((trip) => {
+    const tripBookings = trip.bookingIds.map((id) => state.bookings.find((booking) => booking.id === id)).filter(Boolean).map(effectiveBooking);
+    if (!tripBookings.length) return;
+    const tripStart = Math.min(...tripBookings.map(bookingStartMs));
+    bookings.forEach((booking) => {
+      if (Math.abs(bookingStartMs(booking) - tripStart) <= 3 * 86400000) {
+        candidates.push({ type: "existing", trip, bookings: [booking] });
+      }
+    });
+  });
+  return candidates.slice(0, 8);
+}
+
+function tripCandidateCard(candidate) {
+  if (candidate.type === "existing") {
+    const booking = candidate.bookings[0];
+    return `<article class="trip-candidate-card">
+      <div><strong>${escapeHtml(bookingLabel(booking))}</strong><p>${escapeHtml(candidate.trip.title)} に追加できます</p></div>
+      <button class="secondary-button compact" data-trip-action="add-existing" data-trip-id="${escapeAttribute(candidate.trip.id)}" data-booking-id="${escapeAttribute(booking.id)}" type="button">追加</button>
+    </article>`;
+  }
+  return `<article class="trip-candidate-card">
+    <div><strong>${escapeHtml(candidate.bookings.map(bookingLabel).join(" / "))}</strong><p>日付が近い予約です</p></div>
+    <button class="secondary-button compact" data-trip-action="create-pair" data-booking-ids="${escapeAttribute(candidate.bookings.map((booking) => booking.id).join(","))}" type="button">まとめる</button>
   </article>`;
+}
+
+function handleTripAction(event) {
+  const button = event.target.closest("[data-trip-action]");
+  if (!button) return;
+  if (button.dataset.tripAction === "create-pair") {
+    createTrip(button.dataset.bookingIds.split(",").filter(Boolean));
+  }
+  if (button.dataset.tripAction === "add-existing") {
+    addBookingsToTrip(button.dataset.tripId, [button.dataset.bookingId]);
+  }
+  persist();
+  render();
 }
 
 function handleBookingAction(event) {
@@ -375,7 +446,52 @@ function handleBookingAction(event) {
   const booking = state.bookings.find((item) => item.id === button.dataset.id);
   if (!booking) return;
   if (button.dataset.action === "edit") openBookingDialog(booking);
-  if (button.dataset.action === "hide") cloudSync.saveBooking({ ...booking, hidden: !booking.hidden, updatedAt: new Date().toISOString() }).catch((error) => showToast(readableError(error)));
+  if (button.dataset.action === "hide") {
+    booking.hidden = !booking.hidden;
+    booking.updatedAt = new Date().toISOString();
+    persist();
+    render();
+  }
+  if (button.dataset.action === "new-trip") {
+    createTrip([booking.id]);
+    persist();
+    render();
+  }
+  if (button.dataset.action === "remove-trip") {
+    removeBookingFromTrip(booking.id);
+    persist();
+    render();
+  }
+}
+
+function createTrip(bookingIds) {
+  const id = `trip-${crypto.randomUUID()}`;
+  const title = inferTripTitle(bookingIds.map((id) => state.bookings.find((booking) => booking.id === id)).filter(Boolean).map(effectiveBooking));
+  state.trips.push({ id, title, bookingIds, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() });
+  addBookingsToTrip(id, bookingIds);
+  showToast("同じ出張にまとめました");
+}
+
+function addBookingsToTrip(tripId, bookingIds) {
+  const trip = state.trips.find((item) => item.id === tripId);
+  if (!trip) return;
+  trip.bookingIds = [...new Set([...(trip.bookingIds || []), ...bookingIds])];
+  trip.updatedAt = new Date().toISOString();
+  state.bookings = state.bookings.map((booking) => bookingIds.includes(booking.id)
+    ? { ...booking, tripId, updatedAt: new Date().toISOString() }
+    : booking);
+}
+
+function removeBookingFromTrip(bookingId) {
+  state.bookings = state.bookings.map((booking) => booking.id === bookingId
+    ? { ...booking, tripId: "", updatedAt: new Date().toISOString() }
+    : booking);
+  state.trips = state.trips.map((trip) => ({
+    ...trip,
+    bookingIds: (trip.bookingIds || []).filter((id) => id !== bookingId),
+    updatedAt: new Date().toISOString(),
+  })).filter((trip) => trip.bookingIds.length);
+  showToast("出張から外しました");
 }
 
 function openBookingDialog(booking = null) {
@@ -411,12 +527,8 @@ function updateBookingFields() {
   elements.hotelFields.hidden = flight;
 }
 
-async function saveBooking(event) {
+function saveBooking(event) {
   event.preventDefault();
-  if (!state.user) {
-    elements.formError.textContent = "先にGoogleでログインしてください。";
-    return;
-  }
   const type = elements.bookingType.value;
   const existing = state.bookings.find((item) => item.id === elements.bookingId.value);
   const parsed = existing?.parsed || {};
@@ -445,25 +557,33 @@ async function saveBooking(event) {
     return;
   }
   const id = existing?.id || `manual-${type}-${crypto.randomUUID()}`;
-  await cloudSync.saveBooking({
-    id, type, provider: existing?.provider || "手動",
+  const booking = {
+    id,
+    type,
+    provider: existing?.provider || "手動",
     status: existing?.status || "confirmed",
     source: existing?.source || [],
-    parsed, overrides, hidden: existing?.hidden || false,
+    parsed,
+    overrides,
+    hidden: existing?.hidden || false,
+    tripId: existing?.tripId || "",
     updatedAt: new Date().toISOString(),
-  });
+  };
+  const index = state.bookings.findIndex((item) => item.id === id);
+  if (index >= 0) state.bookings[index] = booking;
+  else state.bookings.push(booking);
+  persist();
+  render();
   elements.bookingDialog.close();
   showToast("予約を保存しました");
 }
 
-async function saveSettings() {
-  if (!state.user) {
-    showToast("先にGoogleでログインしてください");
-    return;
-  }
+function saveSettings() {
   const homeAirport = elements.homeAirportInput.value.trim();
   if (!homeAirport) return showToast("自宅空港を入力してください");
-  await cloudSync.saveSettings({ ...state.settings, homeAirport });
+  state.settings.homeAirport = homeAirport;
+  persist();
+  render();
   showToast("設定を保存しました");
 }
 
@@ -480,7 +600,6 @@ function clearGeminiKey() {
 }
 
 function renderGeminiKeyState() {
-  if (!elements.geminiApiKeyInput) return;
   const hasKey = Boolean(getGeminiApiKey());
   if (hasKey) elements.geminiApiKeyInput.value = "保存済みのAPIキー";
   else if (elements.geminiApiKeyInput.disabled) elements.geminiApiKeyInput.value = "";
@@ -490,70 +609,57 @@ function renderGeminiKeyState() {
   elements.geminiKeyStatus.textContent = hasKey ? "この端末にAPIキーを保存しています。" : "AI解析にはGemini APIキーが必要です。";
 }
 
-async function resetHiddenBookings() {
-  if (!state.user) {
-    showToast("先にGoogleでログインしてください");
-    return;
-  }
-  elements.resetHiddenButton.disabled = true;
-  elements.resetHiddenButton.textContent = "再表示しています...";
-  try {
-    const count = await cloudSync.resetHiddenBookings();
-    showToast(count ? `${count}件の予約を再表示しました` : "非表示の予約はありません");
-    if (count) showView("bookings");
-  } catch (error) {
-    showToast(readableError(error));
-  } finally {
-    elements.resetHiddenButton.disabled = false;
-    elements.resetHiddenButton.textContent = "非表示をすべて解除";
-  }
+function resetHiddenBookings() {
+  const hidden = state.bookings.filter((booking) => booking.hidden);
+  state.bookings = state.bookings.map((booking) => booking.hidden ? { ...booking, hidden: false, updatedAt: new Date().toISOString() } : booking);
+  persist();
+  render();
+  showToast(hidden.length ? `${hidden.length}件の予約を再表示しました` : "非表示の予約はありません");
 }
 
-async function clearImportedData() {
-  if (!state.user) {
-    showToast("先にGoogleでログインしてください");
-    return;
-  }
-  const ok = confirm("取り込み済み予約とAI解析キャッシュを削除します。手修正した予約も削除されます。続けますか？");
+function clearImportedData() {
+  const ok = confirm("端末に保存した予約、AI解析結果、出張まとめを削除します。Gemini APIキーと自宅空港は削除しません。続けますか？");
   if (!ok) return;
-  elements.clearImportedDataButton.disabled = true;
-  elements.clearImportedDataButton.textContent = "削除しています...";
-  try {
-    const deleted = await cloudSync.clearImportedData();
-    state.candidateMessages = [];
-    state.selectedMessageIds.clear();
-    showToast(`予約${deleted.bookings}件、AIキャッシュ${deleted.aiAnalyses}件を削除しました`);
-    showView("sync");
-  } catch (error) {
-    showToast(readableError(error));
-  } finally {
-    elements.clearImportedDataButton.disabled = false;
-    elements.clearImportedDataButton.textContent = "取り込み済みデータをクリア";
-  }
+  clearTripBoardData();
+  const next = loadTripBoardState();
+  state.bookings = next.bookings;
+  state.aiAnalyses = next.aiAnalyses;
+  state.trips = next.trips;
+  state.settings = next.settings;
+  clearPasteDraft();
+  render();
+  showToast("端末保存データをクリアしました");
 }
 
-function updateAuthUI(error) {
-  const signedIn = Boolean(state.user);
-  elements.accountLabel.textContent = signedIn ? state.user.displayName || state.user.email : "Googleで同期";
-  elements.accountSettingsTitle.textContent = signedIn ? state.user.email : "Googleアカウント";
-  elements.accountSettingsCopy.textContent = signedIn ? "予約情報をこのGoogleアカウントで同期しています。" : "ログインすると、予約と手修正内容をiPhone・PC間で同期できます。";
-  elements.accountSettingsButton.textContent = signedIn ? "ログアウト" : "Googleでログイン";
-  elements.syncDot.className = `sync-dot ${state.syncStatus === "synced" ? "synced" : state.syncStatus === "error" ? "error" : state.syncStatus === "syncing" ? "syncing" : ""}`;
-  elements.connectionBanner.hidden = !error && navigator.onLine;
-  elements.connectionBanner.classList.toggle("error", Boolean(error));
-  elements.connectionMessage.textContent = error ? readableError(error) : "オフラインです。保存済みの予約を表示しています。";
+function persist() {
+  saveTripBoardState(state);
 }
 
-window.addEventListener("online", () => updateAuthUI());
-window.addEventListener("offline", () => updateAuthUI());
+window.addEventListener("online", renderLocalState);
+window.addEventListener("offline", renderLocalState);
 if ("serviceWorker" in navigator && location.protocol !== "file:") navigator.serviceWorker.register("./sw.js").catch(() => {});
 const initialView = location.hash.replace("#", "");
 if (["home", "bookings", "sync", "settings"].includes(initialView)) showView(initialView);
 
+function bind(selector, eventName, handler) {
+  document.querySelectorAll(selector).forEach((element) => element.addEventListener(eventName, (event) => handler(event, element)));
+}
+function listen(element, eventName, handler) {
+  element?.addEventListener(eventName, handler);
+}
 function emptyState(title, copy, button) {
   return `<div class="empty-state"><strong>${title}</strong><p>${copy}</p><button class="primary-button compact" data-open-sync type="button">${button}</button></div>`;
 }
-function bookingDate(booking) { return booking.data.startAt || booking.data.checkIn || booking.updatedAt; }
+function bookingStartMs(booking) {
+  return Date.parse(booking.data?.startAt || booking.data?.checkIn || booking.updatedAt || 0);
+}
+function bookingEndMs(booking) {
+  return Date.parse(booking.data?.endAt || booking.data?.checkOut || booking.data?.startAt || booking.data?.checkIn || booking.updatedAt || 0);
+}
+function bookingLabel(booking) {
+  const data = booking.data || {};
+  return booking.type === "flight" ? `${data.flightNumber || "航空券"} ${shortAirport(data.origin)}→${shortAirport(data.destination)}` : data.name || "ホテル";
+}
 function formatDateRange(start, end) { return `${dateOnlySafe(start)} - ${dateOnlySafe(end)}`; }
 function dateOnlySafe(value) { return value ? dateOnly.format(new Date(value)) : "日時未定"; }
 function dateTimeSafe(value) { return value ? dateTime.format(new Date(value)) : "日時未定"; }
@@ -566,22 +672,6 @@ function toLocalInput(value) {
   return local.toISOString().slice(0, 16);
 }
 function fromLocalInput(value) { return value ? new Date(value).toISOString() : ""; }
-function readableError(error) {
-  const message = String(error?.message || error || "エラーが発生しました。");
-  if (message.includes("popup-closed")) return "認証画面が閉じられました。";
-  if (message.includes("permission-denied")) return "Firestoreのアクセス権限を確認してください。";
-  return message.replace(/^Firebase:\s*/, "");
-}
-function publicMessage(message) {
-  return {
-    id: message.id,
-    threadId: message.threadId,
-    subject: message.subject,
-    from: message.from,
-    receivedAt: message.receivedAt,
-    url: message.url,
-  };
-}
 function categoryLabel(category) {
   return {
     flight: "航空券",
@@ -600,8 +690,9 @@ function escapeHtml(value = "") { return String(value).replace(/[&<>"']/g, (char
 function escapeAttribute(value = "") { return escapeHtml(value); }
 function flightIcon() { return `<svg viewBox="0 0 24 24"><path d="M3 15.5 21 8l-7.5 13-2-7-8.5 1.5Z"/><path d="m11.5 14 4-4"/></svg>`; }
 function hotelIcon() { return `<svg viewBox="0 0 24 24"><path d="M4 20V5h11v15M15 10h5v10M8 9h3M8 13h3M8 17h3M2 20h20"/></svg>`; }
-function mailIcon() { return `<svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m4 7 8 6 8-6"/></svg>`; }
 function editIcon() { return `<svg viewBox="0 0 24 24"><path d="m14 5 5 5L8 21H3v-5Z"/><path d="m12 7 5 5"/></svg>`; }
+function refreshIcon() { return `<svg viewBox="0 0 24 24"><path d="M20 7v5h-5M4 17v-5h5"/><path d="M6.1 9a7 7 0 0 1 11.6-2L20 9M4 15l2.3 2a7 7 0 0 0 11.6-2"/></svg>`; }
+function groupIcon() { return `<svg viewBox="0 0 24 24"><path d="M8 7h8M8 12h8M8 17h8"/><circle cx="4" cy="7" r="1"/><circle cx="4" cy="12" r="1"/><circle cx="4" cy="17" r="1"/></svg>`; }
 function eyeIcon(hidden) { return hidden ? `<svg viewBox="0 0 24 24"><path d="m3 3 18 18M10.6 10.6a2 2 0 0 0 2.8 2.8M9.5 5.2A10.8 10.8 0 0 1 12 5c5 0 9 7 9 7a15 15 0 0 1-2 2.7M6.2 6.2C3.8 7.8 3 12 3 12s4 7 9 7a9 9 0 0 0 3-.5"/></svg>` : `<svg viewBox="0 0 24 24"><path d="M3 12s4-7 9-7 9 7 9 7-4 7-9 7-9-7-9-7Z"/><circle cx="12" cy="12" r="2.5"/></svg>`; }
 
 function demoBookings() {
@@ -610,22 +701,22 @@ function demoBookings() {
   const arrival = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 3, 14, 10);
   const returning = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 5, 18, 5);
   const returned = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 5, 20, 55);
-  const source = [{ messageId: "demo", subject: "デモ予約", receivedAt: now.toISOString(), url: "https://mail.google.com/" }];
+  const source = [{ messageId: "demo", subject: "デモ予約", receivedAt: now.toISOString(), url: "" }];
   return [
     {
       id: "demo-flight-out", type: "flight", provider: "JAL", status: "confirmed", source,
       parsed: { reservationNumber: "ABC123", flightNumber: "JAL3513", startAt: departure.toISOString(), endAt: arrival.toISOString(), origin: "福岡", destination: "札幌（新千歳）", seat: "30J" },
-      overrides: {}, hidden: false, updatedAt: now.toISOString(),
+      overrides: {}, hidden: false, tripId: "", updatedAt: now.toISOString(),
     },
     {
       id: "demo-hotel", type: "hotel", provider: "楽天トラベル", status: "confirmed", source,
       parsed: { reservationNumber: "RYdemo123", name: "コンフォートホテルERA札幌北口", address: "北海道札幌市北区", phone: "011-000-0000", checkIn: new Date(now.getFullYear(), now.getMonth(), now.getDate() + 3, 15).toISOString(), checkOut: new Date(now.getFullYear(), now.getMonth(), now.getDate() + 5, 11).toISOString(), roomType: "禁煙ダブルルーム", amount: 28400, breakfast: true },
-      overrides: {}, hidden: false, updatedAt: now.toISOString(),
+      overrides: {}, hidden: false, tripId: "", updatedAt: now.toISOString(),
     },
     {
       id: "demo-flight-in", type: "flight", provider: "JAL", status: "confirmed", source,
       parsed: { reservationNumber: "ABC123", flightNumber: "JAL4472", startAt: returning.toISOString(), endAt: returned.toISOString(), origin: "札幌（新千歳）", destination: "福岡", seat: "17A" },
-      overrides: {}, hidden: false, updatedAt: now.toISOString(),
+      overrides: {}, hidden: false, tripId: "", updatedAt: now.toISOString(),
     },
   ];
 }

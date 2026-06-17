@@ -4,16 +4,16 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#102a43">
-  <meta name="description" content="GmailからJALと楽天トラベルの予約をまとめる、iPhone向け出張ダッシュボード。">
+  <meta name="description" content="貼り付けた予約メールをAIで整理する、iPhone向け出張ダッシュボード。">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="TripBoard">
   <meta name="format-detection" content="telephone=no">
   <title>TripBoard | 出張予約</title>
-  <link rel="manifest" href="./site.webmanifest?v=16">
+  <link rel="manifest" href="./site.webmanifest?v=17">
   <link rel="icon" href="./icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="./apple-touch-icon.png">
-  <link rel="stylesheet" href="./styles.css?v=16">
+  <link rel="stylesheet" href="./styles.css?v=17">
 </head>
 <body>
   <div class="app-shell">
@@ -25,7 +25,7 @@
         <span><strong>TripBoard</strong><small>BUSINESS TRAVEL</small></span>
       </a>
       <button class="account-button" id="accountButton" type="button">
-        <span class="sync-dot" id="syncDot"></span><span id="accountLabel">Googleで同期</span>
+        <span class="sync-dot" id="syncDot"></span><span id="accountLabel">端末保存</span>
       </button>
     </header>
 
@@ -37,7 +37,7 @@
       <section class="view active" id="homeView">
         <div class="hero">
           <div><p class="eyebrow" id="todayLabel"></p><h1>次の出張</h1></div>
-          <button class="round-button" id="heroSyncButton" type="button" aria-label="Gmailを更新">
+          <button class="round-button" id="heroSyncButton" type="button" aria-label="メールを解析">
             <svg viewBox="0 0 24 24"><path d="M20 7v5h-5"/><path d="M4 17v-5h5"/><path d="M6.1 9a7 7 0 0 1 11.6-2L20 9M4 15l2.3 2a7 7 0 0 0 11.6-2"/></svg>
           </button>
         </div>
@@ -62,36 +62,37 @@
           <div class="section-heading"><div><p class="eyebrow">AI REVIEW</p><h2>要確認</h2></div></div>
           <div class="review-list" id="reviewList"></div>
         </section>
+        <section class="review-panel" aria-label="出張まとめ候補">
+          <div class="section-heading"><div><p class="eyebrow">TRIP CANDIDATES</p><h2>まとめ候補</h2></div></div>
+          <div class="review-list" id="tripCandidateList"></div>
+        </section>
         <div class="booking-list" id="bookingList"></div>
       </section>
 
       <section class="view sync-view" id="syncView">
-        <div class="sync-orbit" aria-hidden="true">
-          <span class="orbit-plane"><svg viewBox="0 0 24 24"><path d="M3 15.5 21 8l-7.5 13-2-7-8.5 1.5Z"/></svg></span>
-        </div>
-        <p class="eyebrow">GMAIL IMPORT</p>
-        <h1>AIで予約メールを分類</h1>
-        <p>直近2か月のJAL国内線と楽天トラベルだけを候補にし、選択したメールをGeminiで分類します。</p>
-        <button class="primary-button sync-main-button" id="syncNowButton" type="button">候補メールを取得</button>
-        <button class="secondary-button sync-main-button" id="rescanAllButton" type="button" disabled>選択メールをAI解析</button>
-        <p class="sync-note">同じGmail messageIdと本文ハッシュの結果はキャッシュを使い、AIへ再送しません。</p>
-        <section class="sync-diagnostics" aria-label="AI分類結果">
-          <strong>AI分類結果</strong>
-          <div class="diagnostic-counts">
-            <span><b id="rakutenSearchCount">-</b><small>検索</small></span>
-            <span><b id="rakutenBodyCount">-</b><small>本文</small></span>
-            <span><b id="rakutenParsedCount">-</b><small>予約</small></span>
-            <span><b id="rakutenFailureCount">-</b><small>要確認</small></span>
+        <p class="eyebrow">PASTE EMAIL</p>
+        <h1>メール本文を貼り付け</h1>
+        <p>予約メールの本文を貼り付けると、Geminiが航空券・ホテル・要確認に分類して端末へ保存します。</p>
+        <section class="paste-panel" aria-label="メール本文貼り付け">
+          <div class="form-grid">
+            <label class="field"><span>件名 任意</span><input id="pasteSubject" placeholder="JAL国内線 ご予約内容 / 楽天トラベル予約確認"></label>
+            <label class="field"><span>差出人 任意</span><input id="pasteFrom" placeholder="travel@mail.travel.rakuten.co.jp"></label>
+            <label class="field field-wide"><span>受信日時 任意</span><input id="pasteReceivedAt" type="datetime-local"></label>
+            <label class="field field-wide"><span>メール本文</span><textarea id="pasteBody" placeholder="ここに予約メール本文を貼り付け"></textarea></label>
           </div>
-          <p id="rakutenFailureExamples">候補メールを取得するとAI分類結果を表示します。</p>
+          <div class="paste-actions">
+            <button class="primary-button" id="analyzePasteButton" type="button">AI解析して保存</button>
+            <button class="secondary-button" id="clearPasteButton" type="button">下書きクリア</button>
+            <button class="secondary-button" id="retryFailedButton" type="button" hidden>失敗分を再解析</button>
+          </div>
+          <p class="sync-note" id="pasteSummary">保存済み: 予約0件 / AI結果0件 / 失敗0件</p>
         </section>
-        <div class="candidate-list" id="candidateList"></div>
         <div class="progress-card" id="syncProgress" hidden>
-          <strong id="syncProgressTitle">メールを検索中</strong>
+          <strong id="syncProgressTitle">AI解析中</strong>
           <div><span id="syncProgressBar"></span></div>
           <small id="syncProgressText"></small>
         </div>
-        <small class="last-sync" id="lastSyncLabel">まだ更新されていません</small>
+        <small class="last-sync" id="lastSyncLabel">まだ解析されていません</small>
       </section>
 
       <section class="view" id="settingsView">
@@ -100,11 +101,6 @@
           <label class="field"><span>自宅空港</span><input id="homeAirportInput" value="福岡" placeholder="福岡"></label>
           <p>出発便と復路便を判定し、同じ出張としてまとめるために使います。</p>
           <button class="primary-button" id="saveSettingsButton" type="button">設定を保存</button>
-        </section>
-        <section class="settings-card">
-          <strong id="accountSettingsTitle">Googleアカウント</strong>
-          <p id="accountSettingsCopy">ログインすると、予約と手修正内容をiPhone・PC間で同期できます。</p>
-          <button class="secondary-button" id="accountSettingsButton" type="button">Googleでログイン</button>
         </section>
         <section class="settings-card">
           <label class="field">
@@ -122,12 +118,12 @@
         </section>
         <section class="settings-card danger-card">
           <strong>取り込み済みデータ</strong>
-          <p>Firestoreに保存済みの予約とAI解析キャッシュを削除します。Gmail、Gemini APIキー、自宅空港設定は削除しません。</p>
+          <p>この端末の予約、AI解析結果、出張まとめを削除します。Gemini APIキーと自宅空港設定は削除しません。</p>
           <button class="secondary-button danger-button" id="clearImportedDataButton" type="button">取り込み済みデータをクリア</button>
         </section>
         <section class="privacy-card">
           <strong>プライバシー</strong>
-          <p>Gmailアクセストークンは更新中だけメモリに保持します。Gemini APIキーはこの端末のLocalStorageに保存し、FirestoreにはAI解析後のJSONと予約情報だけを保存します。</p>
+          <p>Gmail APIとFirestore同期は使いません。Gemini APIキー、AI解析結果、予約情報はこの端末のLocalStorageに保存します。AI解析に失敗した本文だけ、再解析用に端末へ残します。</p>
         </section>
       </section>
     </main>
@@ -136,7 +132,7 @@
   <nav class="bottom-nav" aria-label="メインメニュー">
     <button class="active" data-view="home" type="button"><svg viewBox="0 0 24 24"><path d="m3 11 9-8 9 8v10h-6v-6H9v6H3Z"/></svg><span>次の出張</span></button>
     <button data-view="bookings" type="button"><svg viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="15" rx="2"/><path d="M8 3v4M16 3v4M4 10h16"/></svg><span>予約一覧</span></button>
-    <button class="sync-nav" data-view="sync" type="button"><span><svg viewBox="0 0 24 24"><path d="M20 7v5h-5M4 17v-5h5"/><path d="M6.1 9a7 7 0 0 1 11.6-2L20 9M4 15l2.3 2a7 7 0 0 0 11.6-2"/></svg></span><b>更新</b></button>
+    <button class="sync-nav" data-view="sync" type="button"><span><svg viewBox="0 0 24 24"><path d="M4 4h16v16H4z"/><path d="M8 8h8M8 12h8M8 16h5"/></svg></span><b>解析</b></button>
     <button data-view="settings" type="button"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1-2.8 2.8-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.6v.1H10V21a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1L4.2 17l.1-.1a1.7 1.7 0 0 0 .3-1.9A1.7 1.7 0 0 0 3 14H3v-4h.1a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9L4.2 7 7 4.2l.1.1a1.7 1.7 0 0 0 1.9.3A1.7 1.7 0 0 0 10 3h4a1.7 1.7 0 0 0 1 1.6 1.7 1.7 0 0 0 1.9-.3l.1-.1L19.8 7l-.1.1a1.7 1.7 0 0 0-.3 1.9A1.7 1.7 0 0 0 21 10h.1v4H21a1.7 1.7 0 0 0-1.6 1Z"/></svg><span>設定</span></button>
   </nav>
 
@@ -171,6 +167,6 @@
   </dialog>
 
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
-  <script type="module" src="./app.mjs?v=16"></script>
+  <script type="module" src="./app.mjs?v=17"></script>
 </body>
 </html>

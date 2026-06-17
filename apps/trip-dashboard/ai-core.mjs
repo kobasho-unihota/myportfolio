@@ -122,6 +122,38 @@ export function makeFailedAnalysis(message, error, sourceHash = "") {
   }, message);
 }
 
+export function makeManualMessage({ subject = "", from = "", receivedAt = "", body = "" } = {}, options = {}) {
+  const now = options.now || new Date().toISOString();
+  const normalizedBody = String(body || "").trim();
+  const normalizedReceivedAt = normalizeIso(receivedAt) || now;
+  const sourceHash = hashText([
+    subject,
+    from,
+    normalizedReceivedAt,
+    normalizedBody,
+  ].join("\n"));
+  const id = `manual-${sourceHash.replace(/^fnv1a-/, "")}`;
+  return {
+    id,
+    messageId: id,
+    threadId: id,
+    subject: String(subject || "").trim() || "貼り付けメール",
+    from: String(from || "").trim(),
+    receivedAt: normalizedReceivedAt,
+    url: "",
+    body: normalizedBody,
+    sourceHash,
+  };
+}
+
+export function makeFailedManualAnalysis(message, error, sourceHash = message?.sourceHash || "") {
+  return {
+    ...makeFailedAnalysis(message, error, sourceHash),
+    rawBody: String(message?.body || ""),
+    errorMessage: String(error?.message || error || "AI analysis failed"),
+  };
+}
+
 export async function hashMessageSource(message) {
   const value = [
     message?.id || "",
@@ -131,7 +163,11 @@ export async function hashMessageSource(message) {
     message?.receivedAt || "",
     message?.body || "",
   ].join("\n");
-  return `fnv1a-${fnv1a(value)}`;
+  return hashText(value);
+}
+
+export function hashText(value) {
+  return `fnv1a-${fnv1a(String(value || ""))}`;
 }
 
 function flightBookings(analysis) {
