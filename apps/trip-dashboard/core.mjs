@@ -215,9 +215,7 @@ export function bookingWarnings(trip) {
 }
 
 export function gmailQuery(lastSyncedAt) {
-  const after = lastSyncedAt
-    ? new Date(Date.parse(lastSyncedAt) - 30 * 86400000)
-    : new Date(Date.now() - 365 * 86400000);
+  const after = twoMonthsAgo();
   const date = [
     after.getUTCFullYear(),
     String(after.getUTCMonth() + 1).padStart(2, "0"),
@@ -227,9 +225,7 @@ export function gmailQuery(lastSyncedAt) {
 }
 
 export function hotelGmailQuery(lastSyncedAt) {
-  const after = lastSyncedAt
-    ? new Date(Date.parse(lastSyncedAt) - 30 * 86400000)
-    : new Date(Date.now() - 365 * 86400000);
+  const after = twoMonthsAgo();
   const date = [
     after.getUTCFullYear(),
     String(after.getUTCMonth() + 1).padStart(2, "0"),
@@ -381,6 +377,12 @@ function parseRakuten({ subject, body, source }) {
 
 function rakutenSearchTerms() {
   return `{from:travel@mail.travel.rakuten.co.jp from:no-reply@mail.travel.rakuten.co.jp subject:"楽天トラベル"} {subject:"予約" subject:"キャンセル" subject:"予約確認" subject:"予約完了" subject:"予約確認メール" subject:"予約完了メール" subject:"キャンセル確認メール"}`;
+}
+
+function twoMonthsAgo(referenceDate = new Date()) {
+  const date = new Date(referenceDate);
+  date.setUTCMonth(date.getUTCMonth() - 2);
+  return date;
 }
 
 function hotelCompleteness(booking) {

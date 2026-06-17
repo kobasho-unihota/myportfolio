@@ -414,12 +414,11 @@ test("往復便とホテルを一つの出張へまとめる", () => {
   assert.match(trip.title, /札幌/);
 });
 
-test("初回と差分同期のGmail検索期間を生成する", () => {
-  assert.match(gmailQuery("2026-06-13T00:00:00Z"), /after:2026\/05\/14/);
+test("通常更新のGmail検索期間と対象を生成する", () => {
   assert.match(gmailQuery(""), /after:/);
   assert.match(gmailQuery(""), /JAL国内線/);
   assert.match(gmailQuery(""), /booking\.jal\.com/);
-  assert.match(hotelGmailQuery("2026-06-13T00:00:00Z"), /after:2026\/05\/14/);
+  assert.match(hotelGmailQuery(""), /after:/);
   assert.match(hotelGmailQuery(""), /subject:"楽天トラベル"/);
 });
 

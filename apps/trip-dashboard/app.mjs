@@ -1,4 +1,4 @@
-import { analysesToBookings, analysisNeedsReview, cacheMatches, hashMessageSource, makeFailedAnalysis, normalizeAnalysis, travelCandidateQuery, validateAnalysis } from "./ai-core.mjs?v=12";
+import { analysesToBookings, analysisNeedsReview, cacheMatches, hashMessageSource, makeFailedAnalysis, normalizeAnalysis, travelCandidateQuery, validateAnalysis } from "./ai-core.mjs?v=16";
 import { bookingWarnings, effectiveBooking, groupTrips, mergeBookings } from "./core.mjs?v=14";
 import { fetchTravelMessages } from "./gmail.mjs?v=12";
 import { classifyTripEmailWithGemini, clearGeminiApiKey, getGeminiApiKey, saveGeminiApiKey } from "./gemini-client.mjs?v=14";
@@ -80,7 +80,7 @@ async function searchCandidateEmails() {
   try {
     setSyncing(true);
     const token = await cloudSync.authorizeGmail();
-    const messages = await fetchTravelMessages(token, travelCandidateQuery(state.settings.lastSyncedAt), updateProgress);
+    const messages = await fetchTravelMessages(token, travelCandidateQuery(new Date()), updateProgress);
     for (const message of messages) {
       message.sourceHash = await hashMessageSource(message);
     }

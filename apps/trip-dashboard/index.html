@@ -10,10 +10,10 @@
   <meta name="apple-mobile-web-app-title" content="TripBoard">
   <meta name="format-detection" content="telephone=no">
   <title>TripBoard | 出張予約</title>
-  <link rel="manifest" href="./site.webmanifest?v=12">
+  <link rel="manifest" href="./site.webmanifest?v=16">
   <link rel="icon" href="./icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="./apple-touch-icon.png">
-  <link rel="stylesheet" href="./styles.css?v=15">
+  <link rel="stylesheet" href="./styles.css?v=16">
 </head>
 <body>
   <div class="app-shell">
@@ -71,7 +71,7 @@
         </div>
         <p class="eyebrow">GMAIL IMPORT</p>
         <h1>AIで予約メールを分類</h1>
-        <p>候補メールを取得し、選択したメールだけGeminiで分類します。APIキーはこの端末のLocalStorageに保存します。</p>
+        <p>直近2か月のJAL国内線と楽天トラベルだけを候補にし、選択したメールをGeminiで分類します。</p>
         <button class="primary-button sync-main-button" id="syncNowButton" type="button">候補メールを取得</button>
         <button class="secondary-button sync-main-button" id="rescanAllButton" type="button" disabled>選択メールをAI解析</button>
         <p class="sync-note">同じGmail messageIdと本文ハッシュの結果はキャッシュを使い、AIへ再送しません。</p>
@@ -171,6 +171,6 @@
   </dialog>
 
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
-  <script type="module" src="./app.mjs?v=15"></script>
+  <script type="module" src="./app.mjs?v=16"></script>
 </body>
 </html>

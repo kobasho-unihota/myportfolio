@@ -15,7 +15,7 @@ node --test apps/trip-dashboard/ai-core.test.mjs apps/trip-dashboard/core.test.m
 
 ## AI分類
 
-- PWAはGmailから候補メールを取得し、ユーザーが選択したメールだけブラウザからGemini APIへ送ります。
+- PWAは直近2か月のJAL国内線・楽天トラベル候補メールをGmailから取得し、ユーザーが選択したメールだけブラウザからGemini APIへ送ります。
 - Gemini APIキーは利用者の端末のLocalStorageに保存します。公開コードへキーを直接記載しません。
 - FirestoreにはGmail本文を保存しません。保存するのはmessageId単位のAI JSON、検証状態、予約表示用データです。
 - `confidence < 0.75`、分類不能、必須項目不足、解析失敗は要確認として残します。

@@ -2,10 +2,8 @@ export const AI_SCHEMA_VERSION = 1;
 export const LOW_CONFIDENCE_THRESHOLD = 0.75;
 export const AI_CATEGORIES = ["flight", "hotel", "trip_related_unknown", "irrelevant"];
 
-export function travelCandidateQuery(lastSyncedAt) {
-  const after = lastSyncedAt
-    ? new Date(Date.parse(lastSyncedAt) - 30 * 86400000)
-    : new Date(Date.now() - 365 * 86400000);
+export function travelCandidateQuery(referenceDate = new Date()) {
+  const after = twoMonthsAgo(referenceDate);
   const date = [
     after.getUTCFullYear(),
     String(after.getUTCMonth() + 1).padStart(2, "0"),
@@ -17,19 +15,20 @@ export function travelCandidateQuery(lastSyncedAt) {
     "from:jal.com",
     "from:skyinfo.jal.com",
     "from:booking.jal.com",
+    "subject:\"JAL国内線\"",
     "from:travel@mail.travel.rakuten.co.jp",
     "from:no-reply@mail.travel.rakuten.co.jp",
-    "subject:予約",
-    "subject:キャンセル",
-    "subject:搭乗",
-    "subject:チェックイン",
-    "subject:ホテル",
-    "subject:旅程",
-    "subject:楽天トラベル",
+    "subject:\"楽天トラベル\"",
     "}",
     "-in:trash",
     "-in:spam",
   ].join(" ");
+}
+
+function twoMonthsAgo(referenceDate = new Date()) {
+  const date = new Date(referenceDate);
+  date.setUTCMonth(date.getUTCMonth() - 2);
+  return date;
 }
 
 export function normalizeAnalysis(raw, message = {}, options = {}) {
