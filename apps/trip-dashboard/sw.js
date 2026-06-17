@@ -1,14 +1,14 @@
-const CACHE_NAME = "tripboard-shell-v18";
+const CACHE_NAME = "tripboard-shell-v19";
 const APP_SHELL = [
   "./",
   "./index.html",
-  "./styles.css?v=18",
-  "./app.mjs?v=18",
-  "./ai-core.mjs?v=18",
-  "./gemini-client.mjs?v=18",
+  "./styles.css?v=19",
+  "./app.mjs?v=19",
+  "./ai-core.mjs?v=19",
+  "./gemini-client.mjs?v=19",
   "./local-store.mjs?v=17",
   "./core.mjs?v=14",
-  "./site.webmanifest?v=18",
+  "./site.webmanifest?v=19",
   "./icon.svg",
   "./icon-192.png",
   "./icon-512.png",

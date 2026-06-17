@@ -23,9 +23,9 @@ TripBoardは、ユーザーが選択した予約スクリーンショットをAI
 1. ユーザーが解析画面でスクリーンショットを複数選択する。
 2. PWAが各画像を最大長辺1600px、JPEG品質0.82程度へ縮小し、圧縮後bytesから `image-{hash}` と `imageHash` を生成する。
 3. ユーザーは画像ごとに `JAL航空券`、`楽天ホテル`、`AIに判定させる` を選べる。
-4. PWAがGemini APIへ `text prompt + inline_data` を送り、JSON応答をschema validationする。
-5. `flight` / `hotel` は予約データへ変換してlocalStorageへ保存する。低confidence、必須項目不足、分類不能、解析失敗は要確認として残す。
-6. 同一予約候補はbooking IDで統合し、空欄でない項目を補完する。矛盾はwarningsとして要確認に残す。
+4. PWAがGemini APIへ `text prompt + inline_data` を送り、画面内の予約を `reservations` 配列で返させて予約ごとにschema validationする。
+5. 航空券は便名＋出発日時、ホテルは予約番号またはホテル名＋宿泊日で既存bookingと照合し、取り込み済みを除外する。
+6. 新規の `flight` / `hotel` だけ予約データへ変換してlocalStorageへ保存する。低confidence、必須項目不足、分類不能、解析失敗は要確認として残す。
 
 ## UI
 

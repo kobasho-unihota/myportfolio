@@ -222,7 +222,9 @@ ${hint}
 ルール:
 - 画面に見えている文字だけを根拠にする。推測は禁止。
 - 読めない値、不明な値は空文字、false、空配列を使う。
-- confidenceは0から1。
+- スクリーンショット内に複数の予約が見える場合、reservationsへ予約ごとに分けてすべて返す。先頭の1件だけに省略しない。
+- 往路と復路、複数日、スクロール一覧に見える各予約を別要素として返す。
+- 各予約のconfidenceは0から1。
 - warningsは必ず配列で返し、読めない項目や矛盾を入れる。
 - 日付はYYYY-MM-DD、時刻はHH:mmで返す。年が画面にない場合だけ、画面内にある他の文脈から明確なら補う。不明なら空文字。
 - JAL航空券は flightNumber, departureDate, departureTime, arrivalTime, departureAirport, arrivalAirport を優先する。
@@ -234,34 +236,45 @@ ${hint}
 function screenshotResponseSchema() {
   return {
     type: "object",
-    required: ["category", "confidence", "summary", "sourceKind", "extracted", "warnings"],
+    required: ["summary", "sourceKind", "reservations", "warnings"],
     properties: {
-      category: { type: "string", enum: CATEGORIES },
-      confidence: { type: "number", minimum: 0, maximum: 1 },
       summary: { type: "string" },
       sourceKind: { type: "string", enum: ["flight_screenshot", "hotel_screenshot", "unknown_screenshot"] },
-      provider: { type: "string" },
-      reservationNumber: { type: "string" },
-      extracted: {
-        type: "object",
-        properties: {
-          airline: { type: "string" },
-          flightNumber: { type: "string" },
-          departureDate: { type: "string" },
-          departureTime: { type: "string" },
-          arrivalTime: { type: "string" },
-          departureAirport: { type: "string" },
-          arrivalAirport: { type: "string" },
-          hotelName: { type: "string" },
-          checkInDate: { type: "string" },
-          checkOutDate: { type: "string" },
-          nights: { type: "number" },
-          address: { type: "string" },
-          reservationNumber: { type: "string" },
-          planName: { type: "string" },
-          guestName: { type: "string" },
-          checkInTime: { type: "string" },
-          status: { type: "string", enum: ["confirmed", "cancelled"] },
+      reservations: {
+        type: "array",
+        items: {
+          type: "object",
+          required: ["category", "confidence", "summary", "extracted", "warnings"],
+          properties: {
+            category: { type: "string", enum: CATEGORIES },
+            confidence: { type: "number", minimum: 0, maximum: 1 },
+            summary: { type: "string" },
+            provider: { type: "string" },
+            reservationNumber: { type: "string" },
+            extracted: {
+              type: "object",
+              properties: {
+                airline: { type: "string" },
+                flightNumber: { type: "string" },
+                departureDate: { type: "string" },
+                departureTime: { type: "string" },
+                arrivalTime: { type: "string" },
+                departureAirport: { type: "string" },
+                arrivalAirport: { type: "string" },
+                hotelName: { type: "string" },
+                checkInDate: { type: "string" },
+                checkOutDate: { type: "string" },
+                nights: { type: "number" },
+                address: { type: "string" },
+                reservationNumber: { type: "string" },
+                planName: { type: "string" },
+                guestName: { type: "string" },
+                checkInTime: { type: "string" },
+                status: { type: "string", enum: ["confirmed", "cancelled"] },
+              },
+            },
+            warnings: { type: "array", items: { type: "string" } },
+          },
         },
       },
       warnings: { type: "array", items: { type: "string" } },

@@ -4,12 +4,14 @@ import {
   analysesToBookings,
   analysisNeedsReview,
   cacheMatches,
+  excludeImportedBookings,
   hashBytes,
   hashMessageSource,
   makeFailedManualAnalysis,
   makeManualMessage,
   normalizeAnalysis,
   normalizeScreenshotAnalysis,
+  normalizeScreenshotAnalyses,
   travelCandidateQuery,
   validateAnalysis,
   validateScreenshotAnalysis,
@@ -217,4 +219,121 @@ test("画像bytesから安定したhashを生成する", () => {
   const hash = hashBytes(new Uint8Array([1, 2, 3, 4]));
   assert.equal(hash, hashBytes(new Uint8Array([1, 2, 3, 4])));
   assert.match(hash, /^fnv1a-[a-f0-9]{8}$/);
+});
+
+test("1枚のスクショ内の複数予約を予約ごとのanalysisへ展開する", () => {
+  const analyses = normalizeScreenshotAnalyses({
+    sourceKind: "flight_screenshot",
+    summary: "JAL予約一覧",
+    warnings: [],
+    reservations: [
+      {
+        category: "flight",
+        confidence: 0.94,
+        summary: "JAL3513",
+        extracted: {
+          airline: "JAL",
+          flightNumber: "JAL3513",
+          departureDate: "2026-07-20",
+          departureTime: "11:50",
+          arrivalTime: "14:10",
+          departureAirport: "福岡",
+          arrivalAirport: "札幌",
+        },
+        warnings: [],
+      },
+      {
+        category: "flight",
+        confidence: 0.92,
+        summary: "JAL4472",
+        extracted: {
+          airline: "JAL",
+          flightNumber: "JAL4472",
+          departureDate: "2026-07-22",
+          departureTime: "18:05",
+          arrivalTime: "20:55",
+          departureAirport: "札幌",
+          arrivalAirport: "福岡",
+        },
+        warnings: [],
+      },
+    ],
+  }, { imageId: "image-list1234", imageHash: "fnv1a-list1234" });
+
+  assert.equal(analyses.length, 2);
+  assert.equal(analyses[0].messageId, "image-list1234-1");
+  assert.equal(analyses[1].messageId, "image-list1234-2");
+  assert.equal(analysesToBookings(analyses).length, 2);
+});
+
+test("複数予約のうち取り込み済みだけを除外する", () => {
+  const existing = [{
+    id: "legacy-flight-id",
+    type: "flight",
+    parsed: {
+      flightNumber: "JAL3513",
+      startAt: "2026-07-20T02:50:00.000Z",
+      origin: "福岡",
+      destination: "札幌（新千歳）",
+    },
+  }];
+  const analyses = normalizeScreenshotAnalyses({
+    sourceKind: "flight_screenshot",
+    reservations: [
+      {
+        category: "flight",
+        confidence: 0.94,
+        extracted: {
+          airline: "JAL",
+          flightNumber: "JAL3513",
+          departureDate: "2026-07-20",
+          departureTime: "11:50",
+          arrivalTime: "14:10",
+          departureAirport: "福岡",
+          arrivalAirport: "札幌",
+        },
+      },
+      {
+        category: "flight",
+        confidence: 0.92,
+        extracted: {
+          airline: "JAL",
+          flightNumber: "JAL4472",
+          departureDate: "2026-07-22",
+          departureTime: "18:05",
+          arrivalTime: "20:55",
+          departureAirport: "札幌",
+          arrivalAirport: "福岡",
+        },
+      },
+    ],
+  }, { imageId: "image-list1234", imageHash: "fnv1a-list1234" });
+
+  const result = excludeImportedBookings(existing, analysesToBookings(analyses));
+  assert.equal(result.skipped.length, 1);
+  assert.equal(result.bookings.length, 1);
+  assert.equal(result.bookings[0].parsed.flightNumber, "JAL4472");
+});
+
+test("ホテルは予約番号が一致すれば取り込み済みとして除外する", () => {
+  const existing = [{
+    id: "old-hotel",
+    type: "hotel",
+    parsed: { reservationNumber: "RY123", name: "既存ホテル", checkIn: "2026-07-15T06:00:00.000Z" },
+  }];
+  const analysis = normalizeScreenshotAnalysis({
+    category: "hotel",
+    confidence: 0.95,
+    sourceKind: "hotel_screenshot",
+    extracted: {
+      hotelName: "表示名が少し違うホテル",
+      checkInDate: "2026-07-15",
+      checkOutDate: "2026-07-17",
+      reservationNumber: "RY123",
+    },
+  }, { imageHash: "fnv1a-hotel123" });
+
+  const result = excludeImportedBookings(existing, analysesToBookings([analysis]));
+  assert.equal(result.skipped.length, 1);
+  assert.equal(result.bookings.length, 0);
 });

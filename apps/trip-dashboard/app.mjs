@@ -1,14 +1,15 @@
 import {
   analysesToBookings,
   analysisNeedsReview,
+  excludeImportedBookings,
   hashBytes,
   makeFailedScreenshotAnalysis,
   makeScreenshotSource,
-  normalizeScreenshotAnalysis,
+  normalizeScreenshotAnalyses,
   validateScreenshotAnalysis,
-} from "./ai-core.mjs?v=18";
+} from "./ai-core.mjs?v=19";
 import { bookingWarnings, effectiveBooking, mergeBookings } from "./core.mjs?v=14";
-import { classifyTripScreenshotWithGemini, clearGeminiApiKey, getGeminiApiKey, saveGeminiApiKey } from "./gemini-client.mjs?v=18";
+import { classifyTripScreenshotWithGemini, clearGeminiApiKey, getGeminiApiKey, saveGeminiApiKey } from "./gemini-client.mjs?v=19";
 import { clearTripBoardData, loadTripBoardState, saveTripBoardState } from "./local-store.mjs?v=17";
 
 const state = {
@@ -116,24 +117,25 @@ async function analyzeSelectedScreenshots() {
           sourceKind: item.sourceKind,
           imageHash: item.imageHash,
         });
-        let analysis = normalizeScreenshotAnalysis(response.analysis || response, makeScreenshotSource(item), {
+        const analyses = normalizeScreenshotAnalyses(response.analysis || response, makeScreenshotSource(item), {
           imageHash: item.imageHash,
           sourceKind: item.sourceKind,
           model: response.model || "",
         });
-        const validation = validateScreenshotAnalysis(analysis);
-        if (!validation.ok) {
-          analysis = {
+        state.aiAnalyses = state.aiAnalyses.filter((analysis) => analysis.imageId !== item.imageId);
+        const validated = analyses.map((analysis) => {
+          const validation = validateScreenshotAnalysis(analysis);
+          return validation.ok ? validation.analysis : {
             ...validation.analysis,
             status: "needs_review",
             issues: [...new Set([...validation.analysis.issues, ...validation.errors])],
           };
-        }
-        upsertAnalysis(analysis);
-        completed.push(analysis);
+        });
+        validated.forEach(upsertAnalysis);
+        completed.push(...validated);
         item.status = "done";
-        item.statusText = categoryLabel(analysis.category);
-        item.summary = analysis.summary || analysis.issues?.[0] || "";
+        item.statusText = `${validated.length}件抽出`;
+        item.summary = validated.map((analysis) => analysis.summary || categoryLabel(analysis.category)).join(" / ");
       } catch (error) {
         const failed = makeFailedScreenshotAnalysis(item, error);
         upsertAnalysis(failed);
@@ -146,7 +148,7 @@ async function analyzeSelectedScreenshots() {
     state.settings.lastAnalyzedAt = new Date().toISOString();
     persist();
     render();
-    showToast(reflected ? "スクショ解析して予約に反映しました" : "スクショ解析結果を要確認に保存しました");
+    showToast(`新規${reflected.added}件を反映、取り込み済み${reflected.skipped}件を除外しました`);
   } finally {
     setAnalyzing(false);
   }
@@ -164,35 +166,18 @@ function reflectApprovedAnalyses(analyses) {
 }
 
 function reflectScreenshotAnalyses(analyses) {
-  const nextBookings = analysesToBookings(analyses.filter((analysis) => ["flight", "hotel"].includes(analysis.category)))
-    .map(preserveExistingOnConflict);
-  if (!nextBookings.length) return false;
+  const candidates = analysesToBookings(analyses.filter((analysis) => ["flight", "hotel"].includes(analysis.category)));
+  const { bookings: nextBookings, skipped } = excludeImportedBookings(state.bookings, candidates);
+  const skippedAnalysisIds = new Set(skipped.map((booking) => booking.ai?.messageId).filter(Boolean));
+  if (skippedAnalysisIds.size) {
+    state.aiAnalyses = state.aiAnalyses.filter((analysis) => !skippedAnalysisIds.has(analysis.messageId));
+  }
+  if (!nextBookings.length) return { added: 0, skipped: skipped.length };
   state.bookings = mergeBookings(state.bookings, nextBookings).map((booking) => {
     const current = state.bookings.find((item) => item.id === booking.id);
     return { ...booking, tripId: current?.tripId || booking.tripId || "" };
   });
-  return true;
-}
-
-function preserveExistingOnConflict(booking) {
-  const current = state.bookings.find((item) => item.id === booking.id);
-  if (!current) return booking;
-  const nextParsed = { ...(booking.parsed || {}) };
-  const conflicts = [];
-  Object.entries(nextParsed).forEach(([key, value]) => {
-    const currentValue = current.parsed?.[key];
-    if (value !== "" && value !== undefined && currentValue !== "" && currentValue !== undefined && String(value) !== String(currentValue)) {
-      nextParsed[key] = currentValue;
-      conflicts.push(`${key}: ${currentValue} / ${value}`);
-    }
-  });
-  if (!conflicts.length) return booking;
-  const analysis = state.aiAnalyses.find((item) => item.messageId === booking.ai?.messageId);
-  if (analysis) {
-    analysis.status = "needs_review";
-    analysis.issues = [...new Set([...(analysis.issues || []), `既存予約と矛盾する値があります: ${conflicts.join(", ")}`])];
-  }
-  return { ...booking, parsed: nextParsed, status: current.status || booking.status };
+  return { added: nextBookings.length, skipped: skipped.length };
 }
 
 function upsertAnalysis(analysis) {

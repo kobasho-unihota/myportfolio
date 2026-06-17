@@ -1,4 +1,4 @@
-export const AI_SCHEMA_VERSION = 2;
+export const AI_SCHEMA_VERSION = 3;
 export const LOW_CONFIDENCE_THRESHOLD = 0.75;
 export const AI_CATEGORIES = ["flight", "hotel", "trip_related_unknown", "irrelevant"];
 export const SCREENSHOT_SOURCE_KINDS = ["flight_screenshot", "hotel_screenshot", "unknown_screenshot"];
@@ -113,12 +113,33 @@ export function analysesToBookings(analyses) {
   });
 }
 
+export function normalizeScreenshotAnalyses(raw, image = {}, options = {}) {
+  const reservations = Array.isArray(raw?.reservations) && raw.reservations.length
+    ? raw.reservations
+    : [raw];
+  return reservations.map((reservation, index) => normalizeScreenshotAnalysis({
+    ...reservation,
+    sourceKind: reservation?.sourceKind || raw?.sourceKind,
+    model: reservation?.model || raw?.model,
+    warnings: [
+      ...normalizeStringArray(raw?.warnings),
+      ...normalizeStringArray(reservation?.warnings),
+    ],
+  }, image, {
+    ...options,
+    messageId: reservations.length > 1
+      ? `${image.imageId || `image-${String(image.imageHash || options.imageHash || "").replace(/^fnv1a-/, "")}`}-${index + 1}`
+      : image.imageId || options.messageId,
+  }));
+}
+
 export function normalizeScreenshotAnalysis(raw, image = {}, options = {}) {
   const sourceKind = SCREENSHOT_SOURCE_KINDS.includes(raw?.sourceKind || image.sourceKind || options.sourceKind)
     ? String(raw?.sourceKind || image.sourceKind || options.sourceKind)
     : "unknown_screenshot";
   const imageHash = String(raw?.imageHash || image.imageHash || options.imageHash || "");
   const imageId = String(raw?.imageId || image.imageId || (imageHash ? `image-${imageHash.replace(/^fnv1a-/, "")}` : ""));
+  const messageId = String(raw?.messageId || options.messageId || imageId);
   const category = AI_CATEGORIES.includes(raw?.category) ? raw.category : categoryFromSourceKind(sourceKind);
   const extracted = screenshotExtracted(category, raw?.extracted || raw || {}, sourceKind);
   return normalizeAnalysis({
@@ -136,7 +157,7 @@ export function normalizeScreenshotAnalysis(raw, image = {}, options = {}) {
     imageId,
     imageHash,
     sourceKind,
-    messageId: imageId,
+    messageId,
     threadId: imageId,
     subject: screenshotSubject(sourceKind),
     from: "",
@@ -209,6 +230,42 @@ export function hashBytes(bytes) {
     hash = Math.imul(hash, 0x01000193);
   }
   return `fnv1a-${(hash >>> 0).toString(16).padStart(8, "0")}`;
+}
+
+export function excludeImportedBookings(existing = [], incoming = []) {
+  const known = new Set(existing.map(bookingDuplicateKey).filter(Boolean));
+  const bookings = [];
+  const skipped = [];
+  incoming.forEach((booking) => {
+    const key = bookingDuplicateKey(booking);
+    if (key && known.has(key)) {
+      skipped.push(booking);
+      return;
+    }
+    if (key) known.add(key);
+    bookings.push(booking);
+  });
+  return { bookings, skipped };
+}
+
+export function bookingDuplicateKey(booking = {}) {
+  const data = { ...(booking.parsed || {}), ...(booking.overrides || {}), ...(booking.data || {}) };
+  if (booking.type === "flight") {
+    const flightNumber = normalizeFlightNumber(data.flightNumber || "");
+    const startAt = normalizeIso(data.startAt);
+    if (!flightNumber || !startAt) return "";
+    return ["flight", flightNumber, startAt].join("|");
+  }
+  if (booking.type === "hotel") {
+    const reservationNumber = normalizeIdentityText(data.reservationNumber);
+    if (reservationNumber) return `hotel|reservation|${reservationNumber}`;
+    const name = normalizeIdentityText(data.name);
+    const checkIn = normalizeIso(data.checkIn);
+    const checkOut = normalizeIso(data.checkOut);
+    if (!name || !checkIn) return "";
+    return ["hotel", name, checkIn, checkOut].join("|");
+  }
+  return "";
 }
 
 export function makeFailedAnalysis(message, error, sourceHash = "") {
@@ -439,6 +496,10 @@ function screenshotExtracted(category, value, sourceKind) {
     reservationNumber: String(input.reservationNumber || ""),
     note: String(input.note || input.summary || ""),
   };
+}
+
+function normalizeIdentityText(value = "") {
+  return String(value).trim().toLowerCase().replace(/\s+/g, "").replace(/[（(]/g, "(").replace(/[）)]/g, ")");
 }
 
 function normalizeFlightItem(item) {

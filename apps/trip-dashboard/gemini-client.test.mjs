@@ -73,6 +73,8 @@ test("Gemini画像解析はinline_dataでスクショを送る", async (context)
     const parts = body.contents[0].parts;
     assert.equal(body.generationConfig.responseMimeType, "application/json");
     assert.ok(parts[0].text.includes("JAL"));
+    assert.ok(parts[0].text.includes("複数"));
+    assert.ok(body.generationConfig.responseSchema.required.includes("reservations"));
     assert.equal(parts[1].inline_data.mime_type, "image/jpeg");
     assert.equal(parts[1].inline_data.data, "abc123");
     return {
@@ -81,19 +83,23 @@ test("Gemini画像解析はinline_dataでスクショを送る", async (context)
         candidates: [{
           content: {
             parts: [{ text: JSON.stringify({
-              category: "flight",
-              confidence: 0.91,
               sourceKind: "flight_screenshot",
-              summary: "JAL3513",
-              extracted: {
-                airline: "JAL",
-                flightNumber: "JAL3513",
-                departureDate: "2026-07-20",
-                departureTime: "11:50",
-                arrivalTime: "14:10",
-                departureAirport: "福岡",
-                arrivalAirport: "札幌",
-              },
+              summary: "JAL予約一覧",
+              reservations: [{
+                category: "flight",
+                confidence: 0.91,
+                summary: "JAL3513",
+                extracted: {
+                  airline: "JAL",
+                  flightNumber: "JAL3513",
+                  departureDate: "2026-07-20",
+                  departureTime: "11:50",
+                  arrivalTime: "14:10",
+                  departureAirport: "福岡",
+                  arrivalAirport: "札幌",
+                },
+                warnings: [],
+              }],
               warnings: [],
             }) }],
           },

@@ -17,6 +17,7 @@ node --test apps/trip-dashboard/ai-core.test.mjs apps/trip-dashboard/gemini-clie
 
 - Gmail API、Firebase Auth、Firestore同期は初期導線では使いません。
 - ユーザーがスクリーンショットを複数選択し、ブラウザからGemini APIへ送ります。
+- 1枚に複数予約が見える場合は予約ごとに抽出し、取り込み済みと一致する予約を除外して新規分だけ保存します。
 - 送信前に画像を最大長辺1600px、JPEG品質0.82程度へ縮小します。
 - Gemini APIキー、AI解析結果、予約、出張まとめ、自宅空港設定は端末のLocalStorageに保存します。
 - スクリーンショット画像本体はLocalStorageへ保存しません。失敗時の再解析は再アップロード前提です。

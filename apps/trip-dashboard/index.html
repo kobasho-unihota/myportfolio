@@ -10,10 +10,10 @@
   <meta name="apple-mobile-web-app-title" content="TripBoard">
   <meta name="format-detection" content="telephone=no">
   <title>TripBoard | 出張予約</title>
-  <link rel="manifest" href="./site.webmanifest?v=18">
+  <link rel="manifest" href="./site.webmanifest?v=19">
   <link rel="icon" href="./icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="./apple-touch-icon.png">
-  <link rel="stylesheet" href="./styles.css?v=18">
+  <link rel="stylesheet" href="./styles.css?v=19">
 </head>
 <body>
   <div class="app-shell">
@@ -72,7 +72,7 @@
       <section class="view sync-view" id="syncView">
         <p class="eyebrow">SCREENSHOT IMPORT</p>
         <h1>スクショをAI解析</h1>
-        <p>JAL予約一覧や楽天トラベル予約詳細のスクリーンショットを選ぶと、Geminiが予約情報へ変換して端末へ保存します。</p>
+        <p>1枚に複数予約がある場合もすべて抽出します。すでに取り込み済みの予約は除外し、新しい予約だけ保存します。</p>
         <section class="paste-panel screenshot-panel" aria-label="スクリーンショット解析">
           <label class="file-drop">
             <input id="screenshotInput" type="file" accept="image/*" multiple>
@@ -166,6 +166,6 @@
   </dialog>
 
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
-  <script type="module" src="./app.mjs?v=18"></script>
+  <script type="module" src="./app.mjs?v=19"></script>
 </body>
 </html>
