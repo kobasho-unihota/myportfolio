@@ -1,18 +1,19 @@
 import {
   analysesToBookings,
   analysisNeedsReview,
-  makeFailedManualAnalysis,
-  makeManualMessage,
-  normalizeAnalysis,
-  validateAnalysis,
-} from "./ai-core.mjs?v=17";
+  hashBytes,
+  makeFailedScreenshotAnalysis,
+  makeScreenshotSource,
+  normalizeScreenshotAnalysis,
+  validateScreenshotAnalysis,
+} from "./ai-core.mjs?v=18";
 import { bookingWarnings, effectiveBooking, mergeBookings } from "./core.mjs?v=14";
-import { classifyTripEmailWithGemini, clearGeminiApiKey, getGeminiApiKey, saveGeminiApiKey } from "./gemini-client.mjs?v=17";
+import { classifyTripScreenshotWithGemini, clearGeminiApiKey, getGeminiApiKey, saveGeminiApiKey } from "./gemini-client.mjs?v=18";
 import { clearTripBoardData, loadTripBoardState, saveTripBoardState } from "./local-store.mjs?v=17";
 
 const state = {
   ...loadTripBoardState(),
-  pasteDraft: { subject: "", from: "", receivedAt: "", body: "" },
+  screenshotItems: [],
   bookingFilter: "active",
   isAnalyzing: false,
 };
@@ -35,9 +36,9 @@ bind("[data-filter]", "click", (event, button) => {
 bind("[data-close]", "click", () => elements.bookingDialog.close());
 
 listen(elements.heroSyncButton, "click", () => showView("sync"));
-listen(elements.analyzePasteButton, "click", analyzePastedEmail);
-listen(elements.clearPasteButton, "click", clearPasteDraft);
-listen(elements.retryFailedButton, "click", retryFailedAnalyses);
+listen(elements.screenshotInput, "change", handleScreenshotSelection);
+listen(elements.analyzeScreenshotsButton, "click", analyzeSelectedScreenshots);
+listen(elements.clearScreenshotsButton, "click", clearScreenshotSelection);
 listen(elements.accountButton, "click", () => showView("settings"));
 listen(elements.addBookingButton, "click", () => openBookingDialog());
 listen(elements.bookingType, "change", updateBookingFields);
@@ -50,6 +51,7 @@ listen(elements.clearImportedDataButton, "click", clearImportedData);
 listen(elements.bookingList, "click", handleBookingAction);
 listen(elements.reviewList, "click", handleReviewAction);
 listen(elements.tripCandidateList, "click", handleTripAction);
+listen(elements.screenshotList, "change", handleScreenshotKindChange);
 
 elements.todayLabel.textContent = new Intl.DateTimeFormat("ja-JP", {
   year: "numeric", month: "long", day: "numeric", weekday: "long",
@@ -57,83 +59,96 @@ elements.todayLabel.textContent = new Intl.DateTimeFormat("ja-JP", {
 
 render();
 
-async function analyzePastedEmail() {
-  const body = elements.pasteBody.value.trim();
-  if (!body) {
-    showToast("メール本文を貼り付けてください");
-    return;
-  }
-  const apiKey = getGeminiApiKey();
-  if (!apiKey) {
-    showToast("設定画面からGemini APIキーを登録してください");
-    showView("settings");
-    return;
-  }
-  const message = makeManualMessage({
-    subject: elements.pasteSubject.value,
-    from: elements.pasteFrom.value,
-    receivedAt: elements.pasteReceivedAt.value,
-    body,
-  });
-  await analyzeManualMessage(message, apiKey);
-}
-
-async function analyzeManualMessage(message, apiKey = getGeminiApiKey()) {
+async function handleScreenshotSelection(event) {
+  const files = [...(event.target.files || [])].filter((file) => file.type.startsWith("image/"));
+  if (!files.length) return;
+  setAnalyzing(true, "画像を準備しています", "選択画像を縮小しています");
   try {
-    setAnalyzing(true, "AIで分類しています");
-    const response = await classifyTripEmailWithGemini({
-      apiKey,
-      message,
-      body: message.body,
-      sourceHash: message.sourceHash,
-    });
-    let analysis = normalizeAnalysis(response.analysis || response, message, {
-      sourceHash: message.sourceHash,
-      model: response.model || "",
-    });
-    const validation = validateAnalysis(analysis);
-    if (!validation.ok) {
-      analysis = {
-        ...validation.analysis,
-        status: "needs_review",
-        issues: [...new Set([...validation.analysis.issues, ...validation.errors])],
-      };
+    const items = [];
+    for (const file of files) {
+      const prepared = await prepareScreenshot(file);
+      items.push({
+        id: prepared.imageId,
+        fileName: file.name,
+        previewUrl: URL.createObjectURL(file),
+        sourceKind: "unknown_screenshot",
+        status: "ready",
+        statusText: "未解析",
+        summary: "",
+        ...prepared,
+      });
     }
-    upsertAnalysis(analysis);
-    const reflected = reflectApprovedAnalyses([analysis]);
-    state.settings.lastAnalyzedAt = new Date().toISOString();
-    persist();
-    render();
-    showToast(reflected ? "AI解析して予約に反映しました" : "AI解析結果を要確認に保存しました");
+    state.screenshotItems.push(...items);
+    renderScreenshotItems();
+    showToast(`${items.length}枚のスクリーンショットを選択しました`);
   } catch (error) {
-    const failed = makeFailedManualAnalysis(message, error, message.sourceHash);
-    upsertAnalysis(failed);
-    state.settings.lastAnalyzedAt = new Date().toISOString();
-    persist();
-    render();
-    showToast("AI解析に失敗しました。本文を保存したので再解析できます。");
+    showToast(String(error?.message || error));
   } finally {
     setAnalyzing(false);
   }
 }
 
-async function retryFailedAnalyses() {
-  const failed = state.aiAnalyses.filter((analysis) => analysis.status === "failed" && analysis.rawBody);
+async function analyzeSelectedScreenshots() {
+  const targets = state.screenshotItems.filter((item) => item.status !== "done");
+  if (!targets.length) {
+    showToast("解析するスクリーンショットを選択してください");
+    return;
+  }
   const apiKey = getGeminiApiKey();
-  if (!failed.length) return showToast("再解析できる失敗データはありません");
   if (!apiKey) {
     showToast("設定画面からGemini APIキーを登録してください");
     showView("settings");
     return;
   }
-  for (const analysis of failed) {
-    const message = makeManualMessage({
-      subject: analysis.subject,
-      from: analysis.from,
-      receivedAt: analysis.receivedAt,
-      body: analysis.rawBody,
-    });
-    await analyzeManualMessage(message, apiKey);
+  const completed = [];
+  try {
+    setAnalyzing(true, "AIで画像解析しています", `0 / ${targets.length}枚`);
+    for (let index = 0; index < targets.length; index += 1) {
+      const item = targets[index];
+      item.status = "analyzing";
+      item.statusText = "解析中";
+      renderScreenshotItems();
+      setAnalyzing(true, "AIで画像解析しています", `${index + 1} / ${targets.length}枚`);
+      try {
+        const response = await classifyTripScreenshotWithGemini({
+          apiKey,
+          image: { base64: item.base64, mimeType: item.mimeType },
+          sourceKind: item.sourceKind,
+          imageHash: item.imageHash,
+        });
+        let analysis = normalizeScreenshotAnalysis(response.analysis || response, makeScreenshotSource(item), {
+          imageHash: item.imageHash,
+          sourceKind: item.sourceKind,
+          model: response.model || "",
+        });
+        const validation = validateScreenshotAnalysis(analysis);
+        if (!validation.ok) {
+          analysis = {
+            ...validation.analysis,
+            status: "needs_review",
+            issues: [...new Set([...validation.analysis.issues, ...validation.errors])],
+          };
+        }
+        upsertAnalysis(analysis);
+        completed.push(analysis);
+        item.status = "done";
+        item.statusText = categoryLabel(analysis.category);
+        item.summary = analysis.summary || analysis.issues?.[0] || "";
+      } catch (error) {
+        const failed = makeFailedScreenshotAnalysis(item, error);
+        upsertAnalysis(failed);
+        item.status = "failed";
+        item.statusText = "失敗";
+        item.summary = failed.errorMessage;
+      }
+    }
+    const reflected = reflectScreenshotAnalyses(completed);
+    state.settings.lastAnalyzedAt = new Date().toISOString();
+    persist();
+    render();
+    showToast(reflected ? "スクショ解析して予約に反映しました" : "スクショ解析結果を要確認に保存しました");
+  } finally {
+    setAnalyzing(false);
   }
 }
 
@@ -148,30 +163,63 @@ function reflectApprovedAnalyses(analyses) {
   return true;
 }
 
+function reflectScreenshotAnalyses(analyses) {
+  const nextBookings = analysesToBookings(analyses.filter((analysis) => ["flight", "hotel"].includes(analysis.category)))
+    .map(preserveExistingOnConflict);
+  if (!nextBookings.length) return false;
+  state.bookings = mergeBookings(state.bookings, nextBookings).map((booking) => {
+    const current = state.bookings.find((item) => item.id === booking.id);
+    return { ...booking, tripId: current?.tripId || booking.tripId || "" };
+  });
+  return true;
+}
+
+function preserveExistingOnConflict(booking) {
+  const current = state.bookings.find((item) => item.id === booking.id);
+  if (!current) return booking;
+  const nextParsed = { ...(booking.parsed || {}) };
+  const conflicts = [];
+  Object.entries(nextParsed).forEach(([key, value]) => {
+    const currentValue = current.parsed?.[key];
+    if (value !== "" && value !== undefined && currentValue !== "" && currentValue !== undefined && String(value) !== String(currentValue)) {
+      nextParsed[key] = currentValue;
+      conflicts.push(`${key}: ${currentValue} / ${value}`);
+    }
+  });
+  if (!conflicts.length) return booking;
+  const analysis = state.aiAnalyses.find((item) => item.messageId === booking.ai?.messageId);
+  if (analysis) {
+    analysis.status = "needs_review";
+    analysis.issues = [...new Set([...(analysis.issues || []), `既存予約と矛盾する値があります: ${conflicts.join(", ")}`])];
+  }
+  return { ...booking, parsed: nextParsed, status: current.status || booking.status };
+}
+
 function upsertAnalysis(analysis) {
   const index = state.aiAnalyses.findIndex((item) => item.messageId === analysis.messageId);
   if (index >= 0) state.aiAnalyses[index] = analysis;
   else state.aiAnalyses.unshift(analysis);
 }
 
-function clearPasteDraft() {
-  elements.pasteSubject.value = "";
-  elements.pasteFrom.value = "";
-  elements.pasteReceivedAt.value = "";
-  elements.pasteBody.value = "";
-  showToast("貼り付け欄をクリアしました");
+function clearScreenshotSelection() {
+  state.screenshotItems.forEach((item) => {
+    if (item.previewUrl) URL.revokeObjectURL(item.previewUrl);
+  });
+  state.screenshotItems = [];
+  elements.screenshotInput.value = "";
+  renderScreenshotItems();
+  showToast("選択画像をクリアしました");
 }
 
-function setAnalyzing(active, label = "処理中") {
+function setAnalyzing(active, label = "処理中", detail = "") {
   state.isAnalyzing = active;
-  elements.analyzePasteButton.disabled = active;
-  elements.clearPasteButton.disabled = active;
-  elements.retryFailedButton.disabled = active;
-  elements.analyzePasteButton.textContent = active ? "解析しています..." : "AI解析して保存";
+  elements.analyzeScreenshotsButton.disabled = active || !state.screenshotItems.length;
+  elements.clearScreenshotsButton.disabled = active || !state.screenshotItems.length;
+  elements.analyzeScreenshotsButton.textContent = active ? "解析しています..." : "選択画像をAI解析";
   elements.syncProgress.hidden = !active;
   elements.syncProgressTitle.textContent = label;
   elements.syncProgressBar.style.width = active ? "55%" : "0";
-  elements.syncProgressText.textContent = active ? "Geminiに本文を送信しています" : "";
+  elements.syncProgressText.textContent = detail || (active ? "Geminiに画像を送信しています" : "");
 }
 
 function showView(name) {
@@ -187,6 +235,7 @@ function render() {
     : "まだ解析されていません";
   renderGeminiKeyState();
   renderLocalState();
+  renderScreenshotItems();
   renderTrips();
   renderBookings();
   renderReviewItems();
@@ -199,13 +248,85 @@ function renderLocalState() {
   elements.syncDot.className = "sync-dot synced";
   elements.connectionBanner.hidden = navigator.onLine;
   elements.connectionMessage.textContent = "オフラインです。保存済みの予約を表示しています。";
-  elements.pasteSummary.textContent = `保存済み: 予約${state.bookings.length}件 / AI結果${state.aiAnalyses.length}件 / 失敗${failed}件`;
-  elements.retryFailedButton.hidden = failed === 0;
+  elements.screenshotSummary.textContent = `保存済み: 予約${state.bookings.length}件 / AI結果${state.aiAnalyses.length}件 / 失敗${failed}件`;
+}
+
+function renderScreenshotItems() {
+  if (!elements.screenshotList) return;
+  elements.analyzeScreenshotsButton.disabled = state.isAnalyzing || !state.screenshotItems.length;
+  elements.clearScreenshotsButton.disabled = state.isAnalyzing || !state.screenshotItems.length;
+  elements.screenshotList.innerHTML = state.screenshotItems.length
+    ? state.screenshotItems.map(screenshotCard).join("")
+    : `<div class="empty-state"><strong>スクリーンショット未選択</strong><p>JAL予約一覧または楽天トラベル予約詳細のスクショを複数選択できます。</p></div>`;
+}
+
+function screenshotCard(item) {
+  return `<article class="screenshot-card ${escapeAttribute(item.status)}">
+    <img src="${escapeAttribute(item.previewUrl)}" alt="">
+    <div class="screenshot-copy">
+      <strong>${escapeHtml(item.fileName || "スクリーンショット")}</strong>
+      <select data-screenshot-kind="${escapeAttribute(item.id)}">
+        <option value="unknown_screenshot" ${item.sourceKind === "unknown_screenshot" ? "selected" : ""}>AIに判定させる</option>
+        <option value="flight_screenshot" ${item.sourceKind === "flight_screenshot" ? "selected" : ""}>JAL航空券</option>
+        <option value="hotel_screenshot" ${item.sourceKind === "hotel_screenshot" ? "selected" : ""}>楽天ホテル</option>
+      </select>
+      <p>${escapeHtml(item.summary || item.statusText || "未解析")}</p>
+    </div>
+    <span class="status-badge ${item.status === "failed" ? "cancelled" : ""}">${escapeHtml(item.statusText || "未解析")}</span>
+  </article>`;
+}
+
+function handleScreenshotKindChange(event) {
+  const select = event.target.closest("[data-screenshot-kind]");
+  if (!select) return;
+  const item = state.screenshotItems.find((entry) => entry.id === select.dataset.screenshotKind);
+  if (!item) return;
+  item.sourceKind = select.value;
+}
+
+async function prepareScreenshot(file) {
+  const bitmap = await createImageBitmap(file);
+  const scale = Math.min(1, 1600 / Math.max(bitmap.width, bitmap.height));
+  const width = Math.max(1, Math.round(bitmap.width * scale));
+  const height = Math.max(1, Math.round(bitmap.height * scale));
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+  const context = canvas.getContext("2d", { alpha: false });
+  context.fillStyle = "#fff";
+  context.fillRect(0, 0, width, height);
+  context.drawImage(bitmap, 0, 0, width, height);
+  bitmap.close?.();
+  const blob = await new Promise((resolve, reject) => {
+    canvas.toBlob((nextBlob) => nextBlob ? resolve(nextBlob) : reject(new Error("画像の圧縮に失敗しました。")), "image/jpeg", 0.82);
+  });
+  const bytes = new Uint8Array(await blob.arrayBuffer());
+  const imageHash = hashBytes(bytes);
+  const imageId = `image-${imageHash.replace(/^fnv1a-/, "")}`;
+  const dataUrl = await blobToDataUrl(blob);
+  return {
+    imageId,
+    imageHash,
+    base64: String(dataUrl).split(",")[1] || "",
+    mimeType: "image/jpeg",
+    width,
+    height,
+    receivedAt: new Date().toISOString(),
+  };
+}
+
+function blobToDataUrl(blob) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(reader.error || new Error("画像を読み込めませんでした。"));
+    reader.readAsDataURL(blob);
+  });
 }
 
 function renderTrips() {
   const trips = displayTrips().filter((trip) => Date.parse(trip.endAt) >= Date.now() - 12 * 3600000);
-  elements.nextTrip.innerHTML = trips[0] ? tripHero(trips[0]) : emptyState("次の出張はありません", "メール本文を貼り付けてAI解析すると、予約がここに表示されます。", "メールを貼り付ける");
+  elements.nextTrip.innerHTML = trips[0] ? tripHero(trips[0]) : emptyState("次の出張はありません", "予約スクリーンショットをAI解析すると、予約がここに表示されます。", "スクショを解析する");
   elements.nextTrip.querySelector("[data-open-sync]")?.addEventListener("click", () => showView("sync"));
   elements.upcomingTrips.innerHTML = trips.slice(1, 5).length
     ? trips.slice(1, 5).map(tripMini).join("")
@@ -313,7 +434,7 @@ function renderBookings() {
     if (state.bookingFilter === "active") return booking.status !== "cancelled" && !booking.hidden && bookingStartMs(booking) >= Date.now() - 86400000;
     return true;
   });
-  elements.bookingList.innerHTML = filtered.length ? filtered.map(bookingCard).join("") : `<div class="empty-state"><strong>該当する予約はありません</strong><p>メール本文を貼り付けるか、手動で予約を追加してください。</p></div>`;
+  elements.bookingList.innerHTML = filtered.length ? filtered.map(bookingCard).join("") : `<div class="empty-state"><strong>該当する予約はありません</strong><p>スクリーンショットを解析するか、手動で予約を追加してください。</p></div>`;
 }
 
 function bookingCard(booking) {
@@ -343,12 +464,10 @@ function renderReviewItems() {
 
 function reviewCard(analysis) {
   const canApply = ["flight", "hotel"].includes(analysis.category);
-  const canRetry = analysis.status === "failed" && analysis.rawBody;
   return `<article class="review-card">
-    <div><strong>${escapeHtml(analysis.subject || "貼り付けメール")}</strong><p>${escapeHtml(analysis.summary || analysis.issues?.[0] || analysis.errorMessage || "手修正または再解析が必要です。")}</p></div>
+    <div><strong>${escapeHtml(analysis.subject || "スクリーンショット解析")}</strong><p>${escapeHtml(analysis.summary || analysis.issues?.[0] || analysis.errorMessage || "手修正または再アップロードが必要です。")}</p></div>
     <div class="review-actions">
       <span>${categoryLabel(analysis.category)} ${Math.round((analysis.confidence || 0) * 100)}%</span>
-      ${canRetry ? `<button class="mini-button" data-review-action="retry" data-message-id="${escapeAttribute(analysis.messageId)}" type="button" aria-label="再解析">${refreshIcon()}</button>` : ""}
       ${canApply ? `<button class="mini-button" data-review-action="approve" data-message-id="${escapeAttribute(analysis.messageId)}" type="button" aria-label="予約へ反映">${editIcon()}</button>` : ""}
     </div>
   </article>`;
@@ -359,16 +478,6 @@ async function handleReviewAction(event) {
   if (!button) return;
   const analysis = state.aiAnalyses.find((item) => item.messageId === button.dataset.messageId);
   if (!analysis) return;
-  if (button.dataset.reviewAction === "retry") {
-    const message = makeManualMessage({
-      subject: analysis.subject,
-      from: analysis.from,
-      receivedAt: analysis.receivedAt,
-      body: analysis.rawBody,
-    });
-    await analyzeManualMessage(message);
-    return;
-  }
   if (button.dataset.reviewAction === "approve") {
     const approved = { ...analysis, status: "approved", userReviewedAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
     upsertAnalysis(approved);
@@ -626,7 +735,7 @@ function clearImportedData() {
   state.aiAnalyses = next.aiAnalyses;
   state.trips = next.trips;
   state.settings = next.settings;
-  clearPasteDraft();
+  clearScreenshotSelection();
   render();
   showToast("端末保存データをクリアしました");
 }

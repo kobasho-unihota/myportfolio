@@ -4,16 +4,16 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#102a43">
-  <meta name="description" content="貼り付けた予約メールをAIで整理する、iPhone向け出張ダッシュボード。">
+  <meta name="description" content="予約スクリーンショットをAIで整理する、iPhone向け出張ダッシュボード。">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="TripBoard">
   <meta name="format-detection" content="telephone=no">
   <title>TripBoard | 出張予約</title>
-  <link rel="manifest" href="./site.webmanifest?v=17">
+  <link rel="manifest" href="./site.webmanifest?v=18">
   <link rel="icon" href="./icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="./apple-touch-icon.png">
-  <link rel="stylesheet" href="./styles.css?v=17">
+  <link rel="stylesheet" href="./styles.css?v=18">
 </head>
 <body>
   <div class="app-shell">
@@ -70,22 +70,21 @@
       </section>
 
       <section class="view sync-view" id="syncView">
-        <p class="eyebrow">PASTE EMAIL</p>
-        <h1>メール本文を貼り付け</h1>
-        <p>予約メールの本文を貼り付けると、Geminiが航空券・ホテル・要確認に分類して端末へ保存します。</p>
-        <section class="paste-panel" aria-label="メール本文貼り付け">
-          <div class="form-grid">
-            <label class="field"><span>件名 任意</span><input id="pasteSubject" placeholder="JAL国内線 ご予約内容 / 楽天トラベル予約確認"></label>
-            <label class="field"><span>差出人 任意</span><input id="pasteFrom" placeholder="travel@mail.travel.rakuten.co.jp"></label>
-            <label class="field field-wide"><span>受信日時 任意</span><input id="pasteReceivedAt" type="datetime-local"></label>
-            <label class="field field-wide"><span>メール本文</span><textarea id="pasteBody" placeholder="ここに予約メール本文を貼り付け"></textarea></label>
-          </div>
+        <p class="eyebrow">SCREENSHOT IMPORT</p>
+        <h1>スクショをAI解析</h1>
+        <p>JAL予約一覧や楽天トラベル予約詳細のスクリーンショットを選ぶと、Geminiが予約情報へ変換して端末へ保存します。</p>
+        <section class="paste-panel screenshot-panel" aria-label="スクリーンショット解析">
+          <label class="file-drop">
+            <input id="screenshotInput" type="file" accept="image/*" multiple>
+            <span>スクリーンショットを選択</span>
+            <small>複数選択できます。画像本体は保存しません。</small>
+          </label>
+          <div class="screenshot-list" id="screenshotList"></div>
           <div class="paste-actions">
-            <button class="primary-button" id="analyzePasteButton" type="button">AI解析して保存</button>
-            <button class="secondary-button" id="clearPasteButton" type="button">下書きクリア</button>
-            <button class="secondary-button" id="retryFailedButton" type="button" hidden>失敗分を再解析</button>
+            <button class="primary-button" id="analyzeScreenshotsButton" type="button" disabled>選択画像をAI解析</button>
+            <button class="secondary-button" id="clearScreenshotsButton" type="button" disabled>選択をクリア</button>
           </div>
-          <p class="sync-note" id="pasteSummary">保存済み: 予約0件 / AI結果0件 / 失敗0件</p>
+          <p class="sync-note" id="screenshotSummary">保存済み: 予約0件 / AI結果0件 / 失敗0件</p>
         </section>
         <div class="progress-card" id="syncProgress" hidden>
           <strong id="syncProgressTitle">AI解析中</strong>
@@ -123,7 +122,7 @@
         </section>
         <section class="privacy-card">
           <strong>プライバシー</strong>
-          <p>Gmail APIとFirestore同期は使いません。Gemini APIキー、AI解析結果、予約情報はこの端末のLocalStorageに保存します。AI解析に失敗した本文だけ、再解析用に端末へ残します。</p>
+          <p>Gmail APIとFirestore同期は使いません。Gemini APIキー、AI解析結果、予約情報はこの端末のLocalStorageに保存します。スクリーンショット画像本体は保存しません。</p>
         </section>
       </section>
     </main>
@@ -132,7 +131,7 @@
   <nav class="bottom-nav" aria-label="メインメニュー">
     <button class="active" data-view="home" type="button"><svg viewBox="0 0 24 24"><path d="m3 11 9-8 9 8v10h-6v-6H9v6H3Z"/></svg><span>次の出張</span></button>
     <button data-view="bookings" type="button"><svg viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="15" rx="2"/><path d="M8 3v4M16 3v4M4 10h16"/></svg><span>予約一覧</span></button>
-    <button class="sync-nav" data-view="sync" type="button"><span><svg viewBox="0 0 24 24"><path d="M4 4h16v16H4z"/><path d="M8 8h8M8 12h8M8 16h5"/></svg></span><b>解析</b></button>
+    <button class="sync-nav" data-view="sync" type="button"><span><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="8" cy="10" r="1.5"/><path d="m21 15-5-5L5 19"/></svg></span><b>解析</b></button>
     <button data-view="settings" type="button"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1-2.8 2.8-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.6v.1H10V21a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1L4.2 17l.1-.1a1.7 1.7 0 0 0 .3-1.9A1.7 1.7 0 0 0 3 14H3v-4h.1a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9L4.2 7 7 4.2l.1.1a1.7 1.7 0 0 0 1.9.3A1.7 1.7 0 0 0 10 3h4a1.7 1.7 0 0 0 1 1.6 1.7 1.7 0 0 0 1.9-.3l.1-.1L19.8 7l-.1.1a1.7 1.7 0 0 0-.3 1.9A1.7 1.7 0 0 0 21 10h.1v4H21a1.7 1.7 0 0 0-1.6 1Z"/></svg><span>設定</span></button>
   </nav>
 
@@ -167,6 +166,6 @@
   </dialog>
 
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
-  <script type="module" src="./app.mjs?v=17"></script>
+  <script type="module" src="./app.mjs?v=18"></script>
 </body>
 </html>

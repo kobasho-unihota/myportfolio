@@ -14,7 +14,7 @@
     { "src": "./icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
   ],
   "shortcuts": [
-    { "name": "メールを解析", "short_name": "解析", "url": "./#sync" },
+    { "name": "スクショ解析", "short_name": "解析", "url": "./#sync" },
     { "name": "予約一覧", "short_name": "予約", "url": "./#bookings" }
   ]
 }

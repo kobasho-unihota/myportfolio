@@ -186,6 +186,70 @@ h2 { margin-bottom: 0; font-size: 25px; }
   text-align: left;
   box-shadow: 0 8px 30px rgba(16,42,67,.05);
 }
+.file-drop {
+  display: grid;
+  place-items: center;
+  min-height: 150px;
+  padding: 18px;
+  border: 1px dashed #b9c8d6;
+  border-radius: 16px;
+  background: #f7fafc;
+  text-align: center;
+  color: var(--text);
+}
+.file-drop input { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+.file-drop span { font-size: 15px; font-weight: 900; }
+.file-drop small { display: block; margin-top: 7px; color: var(--muted); font-size: 11px; line-height: 1.5; }
+.screenshot-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 14px;
+}
+.screenshot-card {
+  display: grid;
+  grid-template-columns: 76px minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  padding: 11px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #fff;
+}
+.screenshot-card img {
+  width: 76px;
+  height: 76px;
+  border-radius: 10px;
+  object-fit: cover;
+  background: #eef2f5;
+}
+.screenshot-copy { min-width: 0; }
+.screenshot-copy strong {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+}
+.screenshot-copy select {
+  width: 100%;
+  min-height: 34px;
+  margin-top: 7px;
+  padding: 0 9px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: #fff;
+  color: var(--text);
+  font-size: 11px;
+  font-weight: 800;
+}
+.screenshot-copy p {
+  margin: 6px 0 0;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
 .field textarea {
   width: 100%;
   min-height: 240px;
@@ -338,6 +402,10 @@ h2 { margin-bottom: 0; font-size: 25px; }
   .booking-card { grid-template-columns: 43px minmax(0, 1fr) auto; gap: 10px; padding: 14px; }
   .sync-view { padding: 54px 5px; }
   .paste-panel { padding: 14px; border-radius: 16px; }
+  .file-drop { min-height: 132px; }
+  .screenshot-card { grid-template-columns: 66px minmax(0, 1fr); }
+  .screenshot-card img { width: 66px; height: 66px; }
+  .screenshot-card > .status-badge { grid-column: 1 / -1; justify-self: start; }
   .field textarea { min-height: 310px; font-size: 16px; }
   .paste-actions { grid-template-columns: 1fr; }
   .paste-actions .primary-button { grid-column: auto; }

@@ -1,6 +1,7 @@
-export const AI_SCHEMA_VERSION = 1;
+export const AI_SCHEMA_VERSION = 2;
 export const LOW_CONFIDENCE_THRESHOLD = 0.75;
 export const AI_CATEGORIES = ["flight", "hotel", "trip_related_unknown", "irrelevant"];
+export const SCREENSHOT_SOURCE_KINDS = ["flight_screenshot", "hotel_screenshot", "unknown_screenshot"];
 
 export function travelCandidateQuery(referenceDate = new Date()) {
   const after = twoMonthsAgo(referenceDate);
@@ -67,6 +68,10 @@ export function normalizeAnalysis(raw, message = {}, options = {}) {
     updatedAt: now,
     userReviewedAt: analysis.userReviewedAt || "",
     overrides: analysis.overrides && typeof analysis.overrides === "object" ? analysis.overrides : {},
+    sourceType: String(analysis.sourceType || options.sourceType || ""),
+    imageId: String(analysis.imageId || options.imageId || ""),
+    imageHash: String(analysis.imageHash || options.imageHash || ""),
+    sourceKind: SCREENSHOT_SOURCE_KINDS.includes(analysis.sourceKind || options.sourceKind) ? String(analysis.sourceKind || options.sourceKind) : "",
   };
 }
 
@@ -106,6 +111,104 @@ export function analysesToBookings(analyses) {
     if (normalized.category === "hotel") return hotelBooking(normalized);
     return [];
   });
+}
+
+export function normalizeScreenshotAnalysis(raw, image = {}, options = {}) {
+  const sourceKind = SCREENSHOT_SOURCE_KINDS.includes(raw?.sourceKind || image.sourceKind || options.sourceKind)
+    ? String(raw?.sourceKind || image.sourceKind || options.sourceKind)
+    : "unknown_screenshot";
+  const imageHash = String(raw?.imageHash || image.imageHash || options.imageHash || "");
+  const imageId = String(raw?.imageId || image.imageId || (imageHash ? `image-${imageHash.replace(/^fnv1a-/, "")}` : ""));
+  const category = AI_CATEGORIES.includes(raw?.category) ? raw.category : categoryFromSourceKind(sourceKind);
+  const extracted = screenshotExtracted(category, raw?.extracted || raw || {}, sourceKind);
+  return normalizeAnalysis({
+    category,
+    confidence: raw?.confidence,
+    summary: raw?.summary || screenshotSummary(category, extracted),
+    provider: raw?.provider || extracted.provider,
+    reservationNumber: raw?.reservationNumber || extracted.reservationNumber,
+    dateRange: raw?.dateRange || extracted.dateRange,
+    extracted,
+    issues: raw?.issues,
+    warnings: raw?.warnings,
+    status: raw?.status,
+    sourceType: "screenshot",
+    imageId,
+    imageHash,
+    sourceKind,
+    messageId: imageId,
+    threadId: imageId,
+    subject: screenshotSubject(sourceKind),
+    from: "",
+    receivedAt: image.receivedAt || options.now || new Date().toISOString(),
+    sourceHash: imageHash,
+    model: raw?.model || options.model || "",
+    schemaVersion: AI_SCHEMA_VERSION,
+  }, {
+    id: imageId,
+    threadId: imageId,
+    subject: screenshotSubject(sourceKind),
+    receivedAt: image.receivedAt || options.now || new Date().toISOString(),
+  }, { ...options, sourceHash: imageHash, sourceType: "screenshot", imageId, imageHash, sourceKind });
+}
+
+export function validateScreenshotAnalysis(analysis) {
+  const normalized = analysis?.sourceType === "screenshot" && (analysis?.extracted?.items || analysis?.extracted?.name || analysis?.extracted?.note)
+    ? normalizeAnalysis(analysis)
+    : normalizeScreenshotAnalysis(analysis);
+  const errors = [];
+  if (!normalized.imageId) errors.push("imageId is required");
+  if (!SCREENSHOT_SOURCE_KINDS.includes(normalized.sourceKind)) errors.push("sourceKind is invalid");
+  if (!AI_CATEGORIES.includes(normalized.category)) errors.push("category is invalid");
+  if (normalized.category === "flight") {
+    const item = normalized.extracted.items[0] || {};
+    if (!item.startAt || !item.origin || !item.destination) errors.push("flight date and airports are required");
+  }
+  if (normalized.category === "hotel" && (!normalized.extracted.name || !normalized.extracted.checkIn)) {
+    errors.push("hotel name and checkIn are required");
+  }
+  return { ok: errors.length === 0, errors, analysis: normalized };
+}
+
+export function makeScreenshotSource({ imageHash = "", sourceKind = "unknown_screenshot", receivedAt = "" } = {}) {
+  const hash = String(imageHash || "");
+  const id = `image-${hash.replace(/^fnv1a-/, "")}`;
+  return {
+    id,
+    messageId: id,
+    threadId: id,
+    subject: screenshotSubject(sourceKind),
+    from: "",
+    receivedAt: normalizeIso(receivedAt) || new Date().toISOString(),
+    url: "",
+    sourceType: "screenshot",
+    imageId: id,
+    imageHash: hash,
+    sourceKind,
+    sourceHash: hash,
+  };
+}
+
+export function makeFailedScreenshotAnalysis(image, error) {
+  const source = makeScreenshotSource(image);
+  return {
+    ...makeFailedAnalysis(source, error, source.imageHash),
+    sourceType: "screenshot",
+    imageId: source.imageId,
+    imageHash: source.imageHash,
+    sourceKind: source.sourceKind,
+    errorMessage: String(error?.message || error || "AI analysis failed"),
+  };
+}
+
+export function hashBytes(bytes) {
+  const view = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes || []);
+  let hash = 0x811c9dc5;
+  for (let index = 0; index < view.length; index += 1) {
+    hash ^= view[index];
+    hash = Math.imul(hash, 0x01000193);
+  }
+  return `fnv1a-${(hash >>> 0).toString(16).padStart(8, "0")}`;
 }
 
 export function makeFailedAnalysis(message, error, sourceHash = "") {
@@ -178,8 +281,11 @@ function flightBookings(analysis) {
     const reservationNumber = String(flight.reservationNumber || extracted.reservationNumber || analysis.reservationNumber || "");
     const flightNumber = normalizeFlightNumber(flight.flightNumber || extracted.flightNumber || "");
     const startAt = normalizeIso(flight.startAt || extracted.startAt);
+    const dedupeKey = analysis.sourceType === "screenshot"
+      ? slug(flight.dedupeKey || extracted.dedupeKey || [analysis.provider || extracted.provider, flightNumber, startAt, flight.origin || extracted.origin, flight.destination || extracted.destination].join("-"))
+      : slug(reservationNumber || analysis.messageId);
     return {
-      id: `ai-flight-${slug(reservationNumber || analysis.messageId)}-${dateKey(startAt || analysis.receivedAt)}-${slug(flightNumber || index)}`,
+      id: `ai-flight-${dedupeKey}-${dateKey(startAt || analysis.receivedAt)}-${slug(flightNumber || index)}`,
       type: "flight",
       provider: analysis.provider || extracted.provider || "AI",
       status: normalizeBookingStatus(flight.status || extracted.status),
@@ -197,6 +303,7 @@ function flightBookings(analysis) {
       overrides: {},
       hidden: false,
       ai: { messageId: analysis.messageId, confidence: analysis.confidence, status: analysis.status },
+      screenshot: analysis.sourceType === "screenshot" ? { imageId: analysis.imageId, imageHash: analysis.imageHash, sourceKind: analysis.sourceKind } : undefined,
       updatedAt: analysis.updatedAt,
     };
   });
@@ -205,8 +312,11 @@ function flightBookings(analysis) {
 function hotelBooking(analysis) {
   const data = { ...analysis.extracted, ...analysis.overrides };
   const reservationNumber = String(data.reservationNumber || analysis.reservationNumber || "");
+  const dedupeKey = analysis.sourceType === "screenshot"
+    ? slug(data.dedupeKey || reservationNumber || [data.name, data.checkIn, data.checkOut].join("-"))
+    : slug(reservationNumber || analysis.messageId);
   return [{
-    id: `ai-hotel-${slug(reservationNumber || analysis.messageId)}`,
+    id: `ai-hotel-${dedupeKey}`,
     type: "hotel",
     provider: analysis.provider || data.provider || "AI",
     status: normalizeBookingStatus(data.status),
@@ -227,6 +337,7 @@ function hotelBooking(analysis) {
     overrides: {},
     hidden: false,
     ai: { messageId: analysis.messageId, confidence: analysis.confidence, status: analysis.status },
+    screenshot: analysis.sourceType === "screenshot" ? { imageId: analysis.imageId, imageHash: analysis.imageHash, sourceKind: analysis.sourceKind } : undefined,
     updatedAt: analysis.updatedAt,
   }];
 }
@@ -265,6 +376,71 @@ function normalizeExtracted(category, value) {
   };
 }
 
+function screenshotExtracted(category, value, sourceKind) {
+  const input = value && typeof value === "object" ? value : {};
+  if (category === "flight") {
+    const airline = String(input.airline || input.provider || (sourceKind === "flight_screenshot" ? "JAL" : ""));
+    const flightNumber = normalizeFlightNumber(input.flightNumber || "");
+    const departureDate = String(input.departureDate || "");
+    const departureTime = String(input.departureTime || "");
+    const arrivalTime = String(input.arrivalTime || "");
+    const origin = String(input.departureAirport || input.origin || "");
+    const destination = String(input.arrivalAirport || input.destination || "");
+    const startAt = combineScreenshotDateTime(departureDate, departureTime);
+    const endAt = combineScreenshotDateTime(departureDate, arrivalTime, startAt);
+    const dedupeKey = [airline, flightNumber, departureDate, departureTime, origin, destination].join("|");
+    return {
+      provider: airline,
+      reservationNumber: String(input.reservationNumber || ""),
+      status: normalizeBookingStatus(input.status),
+      dateRange: { startAt, endAt },
+      dedupeKey,
+      items: [{
+        flightNumber,
+        origin,
+        destination,
+        startAt,
+        endAt,
+        seat: String(input.seat || ""),
+        bookingLink: "",
+        status: normalizeBookingStatus(input.status),
+        reservationNumber: String(input.reservationNumber || ""),
+        dedupeKey,
+      }],
+    };
+  }
+  if (category === "hotel") {
+    const name = String(input.hotelName || input.name || "");
+    const checkIn = combineScreenshotDateTime(input.checkInDate || input.checkIn || "", input.checkInTime || "");
+    const checkOut = combineScreenshotDateTime(input.checkOutDate || input.checkOut || "", "");
+    const reservationNumber = String(input.reservationNumber || "");
+    return {
+      provider: String(input.provider || (sourceKind === "hotel_screenshot" ? "楽天トラベル" : "")),
+      reservationNumber,
+      status: normalizeBookingStatus(input.status),
+      name,
+      address: String(input.address || ""),
+      phone: String(input.phone || ""),
+      checkIn,
+      checkOut,
+      roomType: String(input.roomType || ""),
+      plan: String(input.planName || input.plan || ""),
+      amount: numberOrEmpty(input.amount),
+      breakfast: typeof input.breakfast === "boolean" ? input.breakfast : false,
+      managementLink: "",
+      guestName: String(input.guestName || ""),
+      nights: numberOrEmpty(input.nights),
+      dedupeKey: reservationNumber || [name, input.checkInDate || input.checkIn || "", input.checkOutDate || input.checkOut || ""].join("|"),
+      dateRange: { startAt: checkIn, endAt: checkOut },
+    };
+  }
+  return {
+    provider: String(input.provider || ""),
+    reservationNumber: String(input.reservationNumber || ""),
+    note: String(input.note || input.summary || ""),
+  };
+}
+
 function normalizeFlightItem(item) {
   const input = item && typeof item === "object" ? item : {};
   return {
@@ -294,6 +470,50 @@ function validationIssues(category, confidence, extracted) {
     if (!extracted.name || !extracted.checkIn) issues.push("ホテル名またはチェックインが不足しています");
   }
   return issues;
+}
+
+function categoryFromSourceKind(sourceKind) {
+  if (sourceKind === "flight_screenshot") return "flight";
+  if (sourceKind === "hotel_screenshot") return "hotel";
+  return "trip_related_unknown";
+}
+
+function screenshotSubject(sourceKind) {
+  if (sourceKind === "flight_screenshot") return "JAL航空券スクリーンショット";
+  if (sourceKind === "hotel_screenshot") return "楽天ホテルスクリーンショット";
+  return "予約スクリーンショット";
+}
+
+function screenshotSummary(category, extracted) {
+  if (category === "flight") {
+    const item = extracted.items?.[0] || {};
+    return [item.flightNumber, item.origin && item.destination ? `${item.origin} → ${item.destination}` : ""].filter(Boolean).join(" ");
+  }
+  if (category === "hotel") return extracted.name || "ホテルスクリーンショット";
+  return extracted.note || "スクリーンショット解析結果";
+}
+
+function combineScreenshotDateTime(dateValue, timeValue, referenceStart = "") {
+  const dateText = String(dateValue || "").trim();
+  if (!dateText) return "";
+  if (/T\d{2}:\d{2}/.test(dateText)) return normalizeIso(dateText);
+  const normalizedDate = dateText
+    .replace(/[年月.]/g, "-")
+    .replace(/日/g, "")
+    .replace(/\//g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "");
+  const timeText = String(timeValue || "").trim();
+  const normalizedTime = /^\d{1,2}:\d{2}/.test(timeText) ? timeText.match(/\d{1,2}:\d{2}/)[0] : "00:00";
+  const iso = normalizeIso(`${normalizedDate}T${normalizedTime}:00+09:00`);
+  if (!iso || !referenceStart || !timeText) return iso;
+  const start = new Date(referenceStart);
+  const end = new Date(iso);
+  if (!Number.isNaN(start.getTime()) && !Number.isNaN(end.getTime()) && end < start) {
+    end.setUTCDate(end.getUTCDate() + 1);
+    return end.toISOString();
+  }
+  return iso;
 }
 
 function normalizeStatus(status, category, confidence, issues) {
