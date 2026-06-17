@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0f172a">
+  <title>TripBoard Next</title>
+  <link rel="manifest" href="./site.webmanifest">
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+  <main>
+    <section id="home" class="view">
+      <p class="eyebrow">NEXT TRIP</p>
+      <h1>次の出張</h1>
+      <div id="nextTrip"></div>
+      <h2>今後の予定</h2>
+      <div id="tripList"></div>
+    </section>
+    <section id="bookings" class="view" hidden>
+      <p class="eyebrow">BOOKINGS</p>
+      <h1>航空券・ホテル</h1>
+      <div id="bookingList"></div>
+    </section>
+    <section id="review" class="view" hidden>
+      <p class="eyebrow">REVIEW</p>
+      <h1>要確認メール</h1>
+      <p class="muted">解析できなかったメールも捨てず、後から確認できる前提の画面です。</p>
+      <div id="reviewList"></div>
+    </section>
+  </main>
+  <nav>
+    <button class="active" data-view="home" type="button">出張</button>
+    <button data-view="bookings" type="button">予約</button>
+    <button data-view="review" type="button">要確認</button>
+  </nav>
+  <script type="module" src="./app.mjs"></script>
+</body>
+</html>
