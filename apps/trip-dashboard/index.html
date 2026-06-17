@@ -13,7 +13,7 @@
   <link rel="manifest" href="./site.webmanifest?v=12">
   <link rel="icon" href="./icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="./apple-touch-icon.png">
-  <link rel="stylesheet" href="./styles.css?v=14">
+  <link rel="stylesheet" href="./styles.css?v=15">
 </head>
 <body>
   <div class="app-shell">
@@ -120,6 +120,11 @@
           <p>非表示ボタンを押した予約をすべて再表示します。予約内容や取消状態は変更しません。</p>
           <button class="secondary-button" id="resetHiddenButton" type="button">非表示をすべて解除</button>
         </section>
+        <section class="settings-card danger-card">
+          <strong>取り込み済みデータ</strong>
+          <p>Firestoreに保存済みの予約とAI解析キャッシュを削除します。Gmail、Gemini APIキー、自宅空港設定は削除しません。</p>
+          <button class="secondary-button danger-button" id="clearImportedDataButton" type="button">取り込み済みデータをクリア</button>
+        </section>
         <section class="privacy-card">
           <strong>プライバシー</strong>
           <p>Gmailアクセストークンは更新中だけメモリに保持します。Gemini APIキーはこの端末のLocalStorageに保存し、FirestoreにはAI解析後のJSONと予約情報だけを保存します。</p>
@@ -166,6 +171,6 @@
   </dialog>
 
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
-  <script type="module" src="./app.mjs?v=14"></script>
+  <script type="module" src="./app.mjs?v=15"></script>
 </body>
 </html>

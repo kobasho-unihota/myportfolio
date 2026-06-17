@@ -2,7 +2,7 @@ import { analysesToBookings, analysisNeedsReview, cacheMatches, hashMessageSourc
 import { bookingWarnings, effectiveBooking, groupTrips, mergeBookings } from "./core.mjs?v=14";
 import { fetchTravelMessages } from "./gmail.mjs?v=12";
 import { classifyTripEmailWithGemini, clearGeminiApiKey, getGeminiApiKey, saveGeminiApiKey } from "./gemini-client.mjs?v=14";
-import { cloudSync } from "./firebase-sync.mjs?v=13";
+import { cloudSync } from "./firebase-sync.mjs?v=15";
 
 const state = {
   user: null,
@@ -58,6 +58,7 @@ elements.saveSettingsButton.addEventListener("click", saveSettings);
 elements.saveGeminiKeyButton.addEventListener("click", saveGeminiKey);
 elements.clearGeminiKeyButton.addEventListener("click", clearGeminiKey);
 elements.resetHiddenButton.addEventListener("click", resetHiddenBookings);
+elements.clearImportedDataButton.addEventListener("click", clearImportedData);
 elements.bookingList.addEventListener("click", handleBookingAction);
 elements.candidateList.addEventListener("change", handleCandidateSelection);
 elements.reviewList.addEventListener("click", handleReviewAction);
@@ -505,6 +506,29 @@ async function resetHiddenBookings() {
   } finally {
     elements.resetHiddenButton.disabled = false;
     elements.resetHiddenButton.textContent = "非表示をすべて解除";
+  }
+}
+
+async function clearImportedData() {
+  if (!state.user) {
+    showToast("先にGoogleでログインしてください");
+    return;
+  }
+  const ok = confirm("取り込み済み予約とAI解析キャッシュを削除します。手修正した予約も削除されます。続けますか？");
+  if (!ok) return;
+  elements.clearImportedDataButton.disabled = true;
+  elements.clearImportedDataButton.textContent = "削除しています...";
+  try {
+    const deleted = await cloudSync.clearImportedData();
+    state.candidateMessages = [];
+    state.selectedMessageIds.clear();
+    showToast(`予約${deleted.bookings}件、AIキャッシュ${deleted.aiAnalyses}件を削除しました`);
+    showView("sync");
+  } catch (error) {
+    showToast(readableError(error));
+  } finally {
+    elements.clearImportedDataButton.disabled = false;
+    elements.clearImportedDataButton.textContent = "取り込み済みデータをクリア";
   }
 }
 

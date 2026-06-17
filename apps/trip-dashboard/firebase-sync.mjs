@@ -114,6 +114,24 @@ export const cloudSync = {
     }
     return hiddenBookings.length;
   },
+  async clearImportedData() {
+    ensureUser();
+    const deleted = { bookings: bookings.length, aiAnalyses: aiAnalyses.length };
+    const bookingIds = bookings.map((booking) => booking.id).filter(Boolean);
+    const analysisIds = aiAnalyses.map((analysis) => analysis.messageId).filter(Boolean);
+    for (let index = 0; index < bookingIds.length; index += 400) {
+      const batch = writeBatch(db);
+      bookingIds.slice(index, index + 400).forEach((id) => batch.delete(doc(bookingsRef(), id)));
+      await batch.commit();
+    }
+    for (let index = 0; index < analysisIds.length; index += 400) {
+      const batch = writeBatch(db);
+      analysisIds.slice(index, index + 400).forEach((id) => batch.delete(doc(analysesRef(), id)));
+      await batch.commit();
+    }
+    await setDoc(settingsRef(), { lastSyncedAt: "" }, { merge: true });
+    return deleted;
+  },
   async replaceHotelBookings(nextHotels) {
     if (!nextHotels.length) {
       throw new Error("解析ホテルが0件のため、既存ホテル予約は変更しません。");
