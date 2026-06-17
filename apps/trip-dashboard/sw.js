@@ -1,18 +1,11 @@
-const CACHE_NAME = "tripboard-shell-v11";
+const CACHE_NAME = "tripboard-shell-rebuild-v1";
 const APP_SHELL = [
   "./",
   "./index.html",
-  "./styles.css?v=11",
-  "./app.mjs?v=11",
-  "./core.mjs?v=11",
-  "./gmail.mjs?v=11",
-  "./firebase-sync.mjs?v=11",
-  "./hotel-pipeline.mjs?v=11",
-  "./site.webmanifest?v=11",
-  "./icon.svg",
-  "./icon-192.png",
-  "./icon-512.png",
-  "./apple-touch-icon.png"
+  "./styles.css",
+  "./app.mjs",
+  "./site.webmanifest",
+  "./icon.svg"
 ];
 self.addEventListener("install", (event) => {
   event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.addAll(APP_SHELL)));
