@@ -79,6 +79,8 @@ function promptFor(message, body) {
 - confidenceは0から1。
 - flightはextracted.itemsに1便以上の区間を入れる。
 - hotelはホテル項目をextracted直下に入れる。
+- hotel.nameはメール本文にある宿泊施設名・ホテル名の正式名称を省略せず入れる。ブランド名だけに短縮しない。
+- hotel.addressには住所だけを入れる。郵便番号や住所をhotel.nameへ混ぜない。
 - statusはconfirmedまたはcancelled。
 
 メール:

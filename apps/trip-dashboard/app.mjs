@@ -1,7 +1,7 @@
 import { analysesToBookings, analysisNeedsReview, cacheMatches, hashMessageSource, makeFailedAnalysis, normalizeAnalysis, travelCandidateQuery, validateAnalysis } from "./ai-core.mjs?v=12";
-import { bookingWarnings, effectiveBooking, groupTrips, mergeBookings } from "./core.mjs?v=12";
+import { bookingWarnings, effectiveBooking, groupTrips, mergeBookings } from "./core.mjs?v=14";
 import { fetchTravelMessages } from "./gmail.mjs?v=12";
-import { classifyTripEmailWithGemini, clearGeminiApiKey, getGeminiApiKey, saveGeminiApiKey } from "./gemini-client.mjs?v=13";
+import { classifyTripEmailWithGemini, clearGeminiApiKey, getGeminiApiKey, saveGeminiApiKey } from "./gemini-client.mjs?v=14";
 import { cloudSync } from "./firebase-sync.mjs?v=13";
 
 const state = {
@@ -223,18 +223,28 @@ function renderTrips() {
 
 function tripHero(trip) {
   const flight = trip.items.find((item) => item.type === "flight");
+  const hotel = trip.items.find((item) => item.type === "hotel");
   const data = flight?.data || {};
+  const hotelData = hotel?.data || {};
   const days = Math.ceil((Date.parse(trip.startAt) - Date.now()) / 86400000);
   const countdown = days > 0 ? `<strong>${days}</strong><span>日後</span>` : `<strong>${days === 0 ? "今日" : "出張中"}</strong><span>TRIP</span>`;
   const warnings = bookingWarnings(trip);
-  return `
-    <article class="trip-hero">
-      <div class="trip-top"><div><small>${formatDateRange(trip.startAt, trip.endAt)}</small><h2>${escapeHtml(trip.title)}</h2></div><div class="countdown">${countdown}</div></div>
+  const mainContent = flight ? `
       <div class="route">
         <div><strong>${escapeHtml(shortAirport(data.origin || state.settings.homeAirport))}</strong><small>${formatTime(data.startAt)}</small></div>
         <div class="route-line"><svg viewBox="0 0 24 24"><path d="M3 15.5 21 8l-7.5 13-2-7-8.5 1.5Z"/></svg></div>
         <div><strong>${escapeHtml(shortAirport(data.destination || trip.destination))}</strong><small>${formatTime(data.endAt)}</small></div>
-      </div>
+      </div>`
+    : `
+      <div class="hotel-hero-details">
+        <div><small>HOTEL</small><strong>${escapeHtml(hotelData.name || "ホテル")}</strong></div>
+        <div><small>CHECK-IN</small><span>${dateTimeSafe(hotelData.checkIn)}</span></div>
+        <div><small>CHECK-OUT</small><span>${dateTimeSafe(hotelData.checkOut)}</span></div>
+      </div>`;
+  return `
+    <article class="trip-hero">
+      <div class="trip-top"><div><small>${formatDateRange(trip.startAt, trip.endAt)}</small><h2>${escapeHtml(trip.title)}</h2></div><div class="countdown">${countdown}</div></div>
+      ${mainContent}
       <div class="trip-meta"><span>${trip.durationDays}日間</span><span>${trip.items.length}件の予約</span>${data.flightNumber ? `<span>${escapeHtml(data.flightNumber)}</span>` : ""}</div>
     </article>
     <div class="timeline">${trip.items.map(timelineItem).join("")}</div>

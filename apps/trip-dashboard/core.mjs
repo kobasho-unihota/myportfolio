@@ -404,10 +404,9 @@ function buildTrip(items, homeAirport) {
   const start = new Date(Math.min(...effective.map(bookingStart)));
   const end = new Date(Math.max(...effective.map(bookingEnd)));
   const outbound = effective.find((item) => item.type === "flight" && airportMatches(item.data.origin, homeAirport));
-  const destination = outbound?.data.destination ||
-    effective.find((item) => item.type === "hotel")?.data.address?.replace(/^〒[\d-]+\s*/, "").split(/[都道府県]/)[0] ||
-    "出張";
-  const destinationLabel = String(destination).replace(/[（(].*?[）)]/g, "").replace(/空港/g, "").trim();
+  const hotel = effective.find((item) => item.type === "hotel");
+  const destination = outbound?.data.destination || destinationFromHotel(hotel) || "出張";
+  const destinationLabel = cleanDestinationLabel(destination);
   return {
     id: effective.map((item) => item.id).sort().join("__"),
     title: destinationLabel === "出張" ? "出張" : `${destinationLabel}出張`,
@@ -424,6 +423,20 @@ function bookingStart(booking) {
 }
 function bookingEnd(booking) {
   return Date.parse(booking.data.endAt || booking.data.checkOut || booking.data.startAt || booking.data.checkIn || 0);
+}
+function destinationFromHotel(hotel) {
+  const address = stripPostalCode(hotel?.data?.address || "");
+  const city = address.match(/(?:北海道|東京都|大阪府|京都府|.{2,3}県)\s*([^市区町村\s]{1,12}[市区町村])/)?.[1];
+  if (city) return city.replace(/[市区町村]$/, "");
+  const prefecture = address.match(/(北海道|東京都|大阪府|京都府|.{2,3}県)/)?.[1];
+  if (prefecture) return prefecture.replace(/[都道府県]$/, "");
+  return "";
+}
+function stripPostalCode(value = "") {
+  return String(value).replace(/^\s*〒?\s*\d{3}-?\d{4}\s*/, "").trim();
+}
+function cleanDestinationLabel(value = "") {
+  return stripPostalCode(value).replace(/[（(].*?[）)]/g, "").replace(/空港/g, "").trim() || "出張";
 }
 function airportMatches(value, homeAirport) {
   const a = cleanAirport(value).replace(/[（）()空港/\s]/g, "");

@@ -88,8 +88,9 @@ h2 { margin-bottom: 0; font-size: 25px; }
   box-shadow: 0 0 0 34px rgba(255,255,255,.025), 0 0 0 70px rgba(255,255,255,.018);
 }
 .trip-top { position: relative; z-index: 1; display: flex; justify-content: space-between; align-items: flex-start; gap: 18px; }
+.trip-top > div:first-child { min-width: 0; }
 .trip-top small { color: rgba(255,255,255,.65); font-size: 11px; }
-.trip-top h2 { margin-top: 5px; font-size: 31px; }
+.trip-top h2 { margin-top: 5px; font-size: 31px; line-height: 1.18; overflow-wrap: anywhere; }
 .countdown {
   min-width: 68px; padding: 10px; border-radius: 16px; background: rgba(255,255,255,.1); text-align: center;
   backdrop-filter: blur(10px);
@@ -106,6 +107,18 @@ h2 { margin-bottom: 0; font-size: 25px; }
 .route-line { display: flex; align-items: center; gap: 4px; color: #87c6ff; }
 .route-line::before, .route-line::after { content: ""; height: 1px; flex: 1; background: rgba(135,198,255,.45); }
 .route-line svg { width: 16px; transform: rotate(90deg); }
+.hotel-hero-details {
+  position: relative; z-index: 1; display: grid; gap: 10px; margin: 25px 0 17px;
+}
+.hotel-hero-details > div {
+  min-width: 0; padding: 12px 14px; border-radius: 14px; background: rgba(255,255,255,.08);
+}
+.hotel-hero-details small {
+  display: block; margin-bottom: 5px; color: rgba(255,255,255,.58); font-size: 9px; font-weight: 900; letter-spacing: .12em;
+}
+.hotel-hero-details strong, .hotel-hero-details span {
+  display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 15px;
+}
 .trip-meta {
   position: relative; z-index: 1; display: flex; flex-wrap: wrap; gap: 8px;
   padding-top: 16px; border-top: 1px solid rgba(255,255,255,.12);
@@ -280,9 +293,10 @@ h2 { margin-bottom: 0; font-size: 25px; }
   .hero, .page-heading { padding-top: 30px; }
   h1 { font-size: 34px; }
   .trip-hero { padding: 23px 20px; border-radius: 24px; }
-  .trip-top h2 { font-size: 27px; }
+  .trip-top h2 { font-size: 25px; }
+  .countdown { min-width: 58px; }
   .route { grid-template-columns: 1fr 45px 1fr; }
-  .route strong { font-size: 21px; }
+  .route strong { font-size: 18px; overflow-wrap: anywhere; }
   .timeline-card { grid-template-columns: 43px minmax(0, 1fr) auto; gap: 11px; padding: 14px; }
   .item-icon { width: 42px; height: 42px; }
   .trip-list { grid-template-columns: 1fr; }
