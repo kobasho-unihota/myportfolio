@@ -17,10 +17,6 @@ import {
   setDoc,
   writeBatch,
 } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-firestore.js";
-import {
-  getFunctions,
-  httpsCallable,
-} from "https://www.gstatic.com/firebasejs/11.10.0/firebase-functions.js";
 import { buildProviderReplacementOperations } from "./core.mjs?v=12";
 
 const firebaseConfig = {
@@ -37,8 +33,6 @@ const auth = getAuth(app);
 const db = initializeFirestore(app, {
   localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }),
 });
-const functions = getFunctions(app, "asia-northeast1");
-const classifyTripEmail = httpsCallable(functions, "classifyTripEmail");
 const provider = new GoogleAuthProvider();
 provider.setCustomParameters({ prompt: "select_account" });
 
@@ -96,11 +90,6 @@ export const cloudSync = {
       });
       await batch.commit();
     }
-  },
-  async classifyTripEmail(payload) {
-    ensureUser();
-    const result = await classifyTripEmail(payload);
-    return result.data;
   },
   async deleteBooking(id) {
     ensureUser();

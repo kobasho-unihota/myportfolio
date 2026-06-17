@@ -71,7 +71,7 @@
         </div>
         <p class="eyebrow">GMAIL IMPORT</p>
         <h1>AIで予約メールを分類</h1>
-        <p>候補メールを取得し、選択したメールだけGeminiで分類します。メール本文やAI APIキーはFirestoreへ保存しません。</p>
+        <p>候補メールを取得し、選択したメールだけGeminiで分類します。APIキーはこの端末のLocalStorageに保存します。</p>
         <button class="primary-button sync-main-button" id="syncNowButton" type="button">候補メールを取得</button>
         <button class="secondary-button sync-main-button" id="rescanAllButton" type="button" disabled>選択メールをAI解析</button>
         <p class="sync-note">同じGmail messageIdと本文ハッシュの結果はキャッシュを使い、AIへ再送しません。</p>
@@ -107,13 +107,22 @@
           <button class="secondary-button" id="accountSettingsButton" type="button">Googleでログイン</button>
         </section>
         <section class="settings-card">
+          <label class="field">
+            <span>Gemini APIキー</span>
+            <input id="geminiApiKeyInput" type="password" placeholder="AIzaSy..." autocomplete="off">
+          </label>
+          <p id="geminiKeyStatus">AI解析にはGemini APIキーが必要です。</p>
+          <button class="primary-button" id="saveGeminiKeyButton" type="button">APIキーを端末に保存</button>
+          <button class="secondary-button" id="clearGeminiKeyButton" type="button" hidden>APIキーを削除して再設定</button>
+        </section>
+        <section class="settings-card">
           <strong>非表示の予約</strong>
           <p>非表示ボタンを押した予約をすべて再表示します。予約内容や取消状態は変更しません。</p>
           <button class="secondary-button" id="resetHiddenButton" type="button">非表示をすべて解除</button>
         </section>
         <section class="privacy-card">
           <strong>プライバシー</strong>
-          <p>Gmailアクセストークンは更新中だけメモリに保持します。FirestoreにはAI解析後のJSONと予約情報だけを保存します。</p>
+          <p>Gmailアクセストークンは更新中だけメモリに保持します。Gemini APIキーはこの端末のLocalStorageに保存し、FirestoreにはAI解析後のJSONと予約情報だけを保存します。</p>
         </section>
       </section>
     </main>
@@ -157,6 +166,6 @@
   </dialog>
 
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
-  <script type="module" src="./app.mjs?v=12"></script>
+  <script type="module" src="./app.mjs?v=13"></script>
 </body>
 </html>

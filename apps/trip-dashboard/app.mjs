@@ -1,7 +1,8 @@
 import { analysesToBookings, analysisNeedsReview, cacheMatches, hashMessageSource, makeFailedAnalysis, normalizeAnalysis, travelCandidateQuery, validateAnalysis } from "./ai-core.mjs?v=12";
 import { bookingWarnings, effectiveBooking, groupTrips, mergeBookings } from "./core.mjs?v=12";
 import { fetchTravelMessages } from "./gmail.mjs?v=12";
-import { cloudSync } from "./firebase-sync.mjs?v=12";
+import { classifyTripEmailWithGemini, clearGeminiApiKey, getGeminiApiKey, saveGeminiApiKey } from "./gemini-client.mjs?v=13";
+import { cloudSync } from "./firebase-sync.mjs?v=13";
 
 const state = {
   user: null,
@@ -54,6 +55,8 @@ elements.addBookingButton.addEventListener("click", () => openBookingDialog());
 elements.bookingType.addEventListener("change", updateBookingFields);
 elements.bookingForm.addEventListener("submit", saveBooking);
 elements.saveSettingsButton.addEventListener("click", saveSettings);
+elements.saveGeminiKeyButton.addEventListener("click", saveGeminiKey);
+elements.clearGeminiKeyButton.addEventListener("click", clearGeminiKey);
 elements.resetHiddenButton.addEventListener("click", resetHiddenBookings);
 elements.bookingList.addEventListener("click", handleBookingAction);
 elements.candidateList.addEventListener("change", handleCandidateSelection);
@@ -100,6 +103,12 @@ async function analyzeSelectedEmails() {
     showToast("AI解析するメールを選択してください");
     return;
   }
+  const apiKey = getGeminiApiKey();
+  if (!apiKey) {
+    showToast("設定画面からGemini APIキーを登録してください");
+    showView("settings");
+    return;
+  }
   try {
     setSyncing(true, true);
     const analyses = [];
@@ -112,7 +121,8 @@ async function analyzeSelectedEmails() {
         continue;
       }
       try {
-        const response = await cloudSync.classifyTripEmail({
+        const response = await classifyTripEmailWithGemini({
+          apiKey,
           message: publicMessage(message),
           body: message.body,
           sourceHash: message.sourceHash,
@@ -191,6 +201,7 @@ function showView(name) {
 
 function render() {
   elements.homeAirportInput.value = state.settings.homeAirport || "福岡";
+  renderGeminiKeyState();
   elements.lastSyncLabel.textContent = state.settings.lastSyncedAt
     ? `最終更新 ${new Intl.DateTimeFormat("ja-JP", { dateStyle: "medium", timeStyle: "short" }).format(new Date(state.settings.lastSyncedAt))}`
     : "まだ更新されていません";
@@ -443,6 +454,29 @@ async function saveSettings() {
   if (!homeAirport) return showToast("自宅空港を入力してください");
   await cloudSync.saveSettings({ ...state.settings, homeAirport });
   showToast("設定を保存しました");
+}
+
+function saveGeminiKey() {
+  const key = saveGeminiApiKey(elements.geminiApiKeyInput.value);
+  renderGeminiKeyState();
+  showToast(key ? "Gemini APIキーを端末に保存しました" : "Gemini APIキーを削除しました");
+}
+
+function clearGeminiKey() {
+  clearGeminiApiKey();
+  renderGeminiKeyState();
+  showToast("Gemini APIキーを削除しました");
+}
+
+function renderGeminiKeyState() {
+  if (!elements.geminiApiKeyInput) return;
+  const hasKey = Boolean(getGeminiApiKey());
+  if (hasKey) elements.geminiApiKeyInput.value = "保存済みのAPIキー";
+  else if (elements.geminiApiKeyInput.disabled) elements.geminiApiKeyInput.value = "";
+  elements.geminiApiKeyInput.disabled = hasKey;
+  elements.saveGeminiKeyButton.hidden = hasKey;
+  elements.clearGeminiKeyButton.hidden = !hasKey;
+  elements.geminiKeyStatus.textContent = hasKey ? "この端末にAPIキーを保存しています。" : "AI解析にはGemini APIキーが必要です。";
 }
 
 async function resetHiddenBookings() {
