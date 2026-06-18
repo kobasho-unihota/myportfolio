@@ -32,6 +32,10 @@ export function clearTripBoardData(storage = localStorage) {
   storage.setItem(STORAGE_KEYS.settings, JSON.stringify({ ...settings, lastAnalyzedAt: "" }));
 }
 
+export function clearMigratedTripBoardData(storage = localStorage) {
+  Object.values(STORAGE_KEYS).forEach((key) => storage.removeItem(key));
+}
+
 function readJson(storage, key, fallback) {
   try {
     const raw = storage.getItem(key);

@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { clearTripBoardData, loadTripBoardState, saveTripBoardState } from "./local-store.mjs";
+import { clearMigratedTripBoardData, clearTripBoardData, loadTripBoardState, saveTripBoardState } from "./local-store.mjs";
 
 function storage() {
   const store = new Map();
@@ -43,4 +43,21 @@ test("取り込み済みデータクリアはAPIキー以外のTripBoardデー�
   assert.deepEqual(loaded.trips, []);
   assert.equal(loaded.settings.homeAirport, "福岡");
   assert.equal(loaded.settings.lastAnalyzedAt, "");
+});
+
+test("Firebase移行完了後は旧TripBoardキーをすべて削除する", () => {
+  const target = storage();
+  saveTripBoardState({
+    bookings: [{ id: "booking-1" }],
+    aiAnalyses: [],
+    trips: [],
+    settings: { homeAirport: "羽田", lastAnalyzedAt: "" },
+  }, target);
+  target.setItem("tripboard:gemini-api-key", "secret");
+
+  clearMigratedTripBoardData(target);
+
+  assert.deepEqual(loadTripBoardState(target).bookings, []);
+  assert.equal(loadTripBoardState(target).settings.homeAirport, "福岡");
+  assert.equal(target.getItem("tripboard:gemini-api-key"), "secret");
 });

@@ -10,10 +10,10 @@
   <meta name="apple-mobile-web-app-title" content="TripBoard">
   <meta name="format-detection" content="telephone=no">
   <title>TripBoard | 出張予約</title>
-  <link rel="manifest" href="./site.webmanifest?v=19">
+  <link rel="manifest" href="./site.webmanifest?v=20">
   <link rel="icon" href="./icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="./apple-touch-icon.png">
-  <link rel="stylesheet" href="./styles.css?v=19">
+  <link rel="stylesheet" href="./styles.css?v=20">
 </head>
 <body>
   <div class="app-shell">
@@ -25,7 +25,7 @@
         <span><strong>TripBoard</strong><small>BUSINESS TRAVEL</small></span>
       </a>
       <button class="account-button" id="accountButton" type="button">
-        <span class="sync-dot" id="syncDot"></span><span id="accountLabel">端末保存</span>
+        <span class="sync-dot" id="syncDot"></span><span id="accountLabel">Googleで同期</span>
       </button>
     </header>
 
@@ -102,6 +102,11 @@
           <button class="primary-button" id="saveSettingsButton" type="button">設定を保存</button>
         </section>
         <section class="settings-card">
+          <strong id="accountSettingsTitle">Googleアカウント</strong>
+          <p id="accountSettingsCopy">ログインすると、予約と解析結果をFirebaseへ保存して端末間で同期できます。</p>
+          <button class="secondary-button" id="accountSettingsButton" type="button">Googleでログイン</button>
+        </section>
+        <section class="settings-card">
           <label class="field">
             <span>Gemini APIキー</span>
             <input id="geminiApiKeyInput" type="password" placeholder="AIzaSy..." autocomplete="off">
@@ -117,12 +122,12 @@
         </section>
         <section class="settings-card danger-card">
           <strong>取り込み済みデータ</strong>
-          <p>この端末の予約、AI解析結果、出張まとめを削除します。Gemini APIキーと自宅空港設定は削除しません。</p>
+          <p>Firebaseに保存した予約、AI解析結果、出張まとめを削除します。Gemini APIキーと自宅空港設定は削除しません。</p>
           <button class="secondary-button danger-button" id="clearImportedDataButton" type="button">取り込み済みデータをクリア</button>
         </section>
         <section class="privacy-card">
           <strong>プライバシー</strong>
-          <p>Gmail APIとFirestore同期は使いません。Gemini APIキー、AI解析結果、予約情報はこの端末のLocalStorageに保存します。スクリーンショット画像本体は保存しません。</p>
+          <p>予約、AI解析結果、出張まとめ、設定はFirebaseへ保存します。Gemini APIキーだけはこの端末のLocalStorageに保存し、スクリーンショット画像本体は保存しません。</p>
         </section>
       </section>
     </main>
@@ -166,6 +171,6 @@
   </dialog>
 
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
-  <script type="module" src="./app.mjs?v=19"></script>
+  <script type="module" src="./app.mjs?v=20"></script>
 </body>
 </html>

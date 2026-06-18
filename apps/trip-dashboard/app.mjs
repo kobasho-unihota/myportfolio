@@ -10,14 +10,21 @@ import {
 } from "./ai-core.mjs?v=19";
 import { bookingWarnings, effectiveBooking, mergeBookings } from "./core.mjs?v=14";
 import { classifyTripScreenshotWithGemini, clearGeminiApiKey, getGeminiApiKey, saveGeminiApiKey } from "./gemini-client.mjs?v=19";
-import { clearTripBoardData, loadTripBoardState, saveTripBoardState } from "./local-store.mjs?v=17";
+import { cloudSync } from "./firebase-sync.mjs?v=20";
+import { hasMigrationData, isEmptyCloudState } from "./firebase-state.mjs?v=20";
+import { clearMigratedTripBoardData, loadTripBoardState } from "./local-store.mjs?v=20";
 
+const localMigrationState = loadTripBoardState();
 const state = {
-  ...loadTripBoardState(),
+  ...localMigrationState,
+  user: null,
+  syncStatus: "loading",
   screenshotItems: [],
   bookingFilter: "active",
   isAnalyzing: false,
 };
+let migrationAttempted = false;
+let saveQueue = Promise.resolve();
 const demoMode = new URLSearchParams(location.search).has("demo");
 const dateTime = new Intl.DateTimeFormat("ja-JP", { month: "numeric", day: "numeric", weekday: "short", hour: "2-digit", minute: "2-digit" });
 const dateOnly = new Intl.DateTimeFormat("ja-JP", { month: "long", day: "numeric", weekday: "short" });
@@ -25,7 +32,6 @@ const elements = Object.fromEntries([...document.querySelectorAll("[id]")].map((
 
 if (demoMode && !state.bookings.length) {
   state.bookings = demoBookings();
-  persist();
 }
 
 bind("[data-view]", "click", (event, button) => showView(button.dataset.view));
@@ -40,7 +46,8 @@ listen(elements.heroSyncButton, "click", () => showView("sync"));
 listen(elements.screenshotInput, "change", handleScreenshotSelection);
 listen(elements.analyzeScreenshotsButton, "click", analyzeSelectedScreenshots);
 listen(elements.clearScreenshotsButton, "click", clearScreenshotSelection);
-listen(elements.accountButton, "click", () => showView("settings"));
+listen(elements.accountButton, "click", handleAccount);
+listen(elements.accountSettingsButton, "click", handleAccount);
 listen(elements.addBookingButton, "click", () => openBookingDialog());
 listen(elements.bookingType, "change", updateBookingFields);
 listen(elements.bookingForm, "submit", saveBooking);
@@ -58,7 +65,49 @@ elements.todayLabel.textContent = new Intl.DateTimeFormat("ja-JP", {
   year: "numeric", month: "long", day: "numeric", weekday: "long",
 }).format(new Date());
 
+cloudSync.subscribe(handleCloudSnapshot);
 render();
+
+async function handleCloudSnapshot(snapshot) {
+  state.user = snapshot.user;
+  state.syncStatus = snapshot.status;
+  if (snapshot.status === "synced") {
+    if (!migrationAttempted && isEmptyCloudState(snapshot.state) && hasMigrationData(localMigrationState)) {
+      migrationAttempted = true;
+      try {
+        await cloudSync.saveState(localMigrationState);
+        clearMigratedTripBoardData();
+        showToast(`端末の予約${localMigrationState.bookings.length}件をFirebaseへ移行しました`);
+        return;
+      } catch (error) {
+        migrationAttempted = false;
+        showToast(readableError(error));
+      }
+    }
+    state.bookings = snapshot.state.bookings || [];
+    state.aiAnalyses = snapshot.state.aiAnalyses || [];
+    state.trips = snapshot.state.trips || [];
+    state.settings = { homeAirport: "福岡", lastAnalyzedAt: "", ...(snapshot.state.settings || {}) };
+  }
+  if (snapshot.status === "signed-out") {
+    const local = loadTripBoardState();
+    state.bookings = local.bookings;
+    state.aiAnalyses = local.aiAnalyses;
+    state.trips = local.trips;
+    state.settings = local.settings;
+  }
+  if (snapshot.status === "error") showToast(readableError(snapshot.error));
+  render();
+}
+
+async function handleAccount() {
+  try {
+    if (state.user) await cloudSync.signOut();
+    else await cloudSync.signIn();
+  } catch (error) {
+    showToast(readableError(error));
+  }
+}
 
 async function handleScreenshotSelection(event) {
   const files = [...(event.target.files || [])].filter((file) => file.type.startsWith("image/"));
@@ -90,6 +139,7 @@ async function handleScreenshotSelection(event) {
 }
 
 async function analyzeSelectedScreenshots() {
+  if (!requireUser()) return;
   const targets = state.screenshotItems.filter((item) => item.status !== "done");
   if (!targets.length) {
     showToast("解析するスクリーンショットを選択してください");
@@ -229,10 +279,19 @@ function render() {
 
 function renderLocalState() {
   const failed = state.aiAnalyses.filter((analysis) => analysis.status === "failed").length;
-  elements.accountLabel.textContent = "端末保存";
-  elements.syncDot.className = "sync-dot synced";
-  elements.connectionBanner.hidden = navigator.onLine;
-  elements.connectionMessage.textContent = "オフラインです。保存済みの予約を表示しています。";
+  const signedIn = Boolean(state.user);
+  elements.accountLabel.textContent = signedIn ? state.user.displayName || state.user.email : "Googleで同期";
+  elements.accountSettingsTitle.textContent = signedIn ? state.user.email : "Googleアカウント";
+  elements.accountSettingsCopy.textContent = signedIn
+    ? "予約、AI解析結果、出張まとめ、設定をFirebaseで同期しています。"
+    : "ログインすると、この端末の既存予約をFirebaseへ自動移行し、iPhoneとPCで同期できます。";
+  elements.accountSettingsButton.textContent = signedIn ? "ログアウト" : "Googleでログイン";
+  elements.syncDot.className = `sync-dot ${state.syncStatus === "synced" ? "synced" : state.syncStatus === "error" ? "error" : state.syncStatus === "syncing" || state.syncStatus === "loading" ? "syncing" : ""}`;
+  elements.connectionBanner.hidden = navigator.onLine && state.syncStatus !== "error";
+  elements.connectionBanner.classList.toggle("error", state.syncStatus === "error");
+  elements.connectionMessage.textContent = state.syncStatus === "error"
+    ? "Firebaseとの同期に失敗しました。通信環境またはアクセス権限を確認してください。"
+    : "オフラインです。Firestoreの端末キャッシュから表示しています。";
   elements.screenshotSummary.textContent = `保存済み: 予約${state.bookings.length}件 / AI結果${state.aiAnalyses.length}件 / 失敗${failed}件`;
 }
 
@@ -464,6 +523,7 @@ async function handleReviewAction(event) {
   const analysis = state.aiAnalyses.find((item) => item.messageId === button.dataset.messageId);
   if (!analysis) return;
   if (button.dataset.reviewAction === "approve") {
+    if (!requireUser()) return;
     const approved = { ...analysis, status: "approved", userReviewedAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
     upsertAnalysis(approved);
     reflectApprovedAnalyses([approved]);
@@ -524,6 +584,7 @@ function tripCandidateCard(candidate) {
 function handleTripAction(event) {
   const button = event.target.closest("[data-trip-action]");
   if (!button) return;
+  if (!requireUser()) return;
   if (button.dataset.tripAction === "create-pair") {
     createTrip(button.dataset.bookingIds.split(",").filter(Boolean));
   }
@@ -541,17 +602,20 @@ function handleBookingAction(event) {
   if (!booking) return;
   if (button.dataset.action === "edit") openBookingDialog(booking);
   if (button.dataset.action === "hide") {
+    if (!requireUser()) return;
     booking.hidden = !booking.hidden;
     booking.updatedAt = new Date().toISOString();
     persist();
     render();
   }
   if (button.dataset.action === "new-trip") {
+    if (!requireUser()) return;
     createTrip([booking.id]);
     persist();
     render();
   }
   if (button.dataset.action === "remove-trip") {
+    if (!requireUser()) return;
     removeBookingFromTrip(booking.id);
     persist();
     render();
@@ -623,6 +687,10 @@ function updateBookingFields() {
 
 function saveBooking(event) {
   event.preventDefault();
+  if (!requireUser()) {
+    elements.formError.textContent = "先にGoogleでログインしてください。";
+    return;
+  }
   const type = elements.bookingType.value;
   const existing = state.bookings.find((item) => item.id === elements.bookingId.value);
   const parsed = existing?.parsed || {};
@@ -673,6 +741,7 @@ function saveBooking(event) {
 }
 
 function saveSettings() {
+  if (!requireUser()) return;
   const homeAirport = elements.homeAirportInput.value.trim();
   if (!homeAirport) return showToast("自宅空港を入力してください");
   state.settings.homeAirport = homeAirport;
@@ -704,6 +773,7 @@ function renderGeminiKeyState() {
 }
 
 function resetHiddenBookings() {
+  if (!requireUser()) return;
   const hidden = state.bookings.filter((booking) => booking.hidden);
   state.bookings = state.bookings.map((booking) => booking.hidden ? { ...booking, hidden: false, updatedAt: new Date().toISOString() } : booking);
   persist();
@@ -711,22 +781,45 @@ function resetHiddenBookings() {
   showToast(hidden.length ? `${hidden.length}件の予約を再表示しました` : "非表示の予約はありません");
 }
 
-function clearImportedData() {
-  const ok = confirm("端末に保存した予約、AI解析結果、出張まとめを削除します。Gemini APIキーと自宅空港は削除しません。続けますか？");
+async function clearImportedData() {
+  if (!requireUser()) return;
+  const ok = confirm("Firebaseに保存した予約、AI解析結果、出張まとめを削除します。Gemini APIキーと自宅空港は削除しません。続けますか？");
   if (!ok) return;
-  clearTripBoardData();
-  const next = loadTripBoardState();
-  state.bookings = next.bookings;
-  state.aiAnalyses = next.aiAnalyses;
-  state.trips = next.trips;
-  state.settings = next.settings;
-  clearScreenshotSelection();
-  render();
-  showToast("端末保存データをクリアしました");
+  elements.clearImportedDataButton.disabled = true;
+  try {
+    await cloudSync.saveState({
+      bookings: [],
+      aiAnalyses: [],
+      trips: [],
+      settings: { ...state.settings, lastAnalyzedAt: "" },
+    });
+    state.bookings = [];
+    state.aiAnalyses = [];
+    state.trips = [];
+    state.settings = { ...state.settings, lastAnalyzedAt: "" };
+    clearMigratedTripBoardData();
+    clearScreenshotSelection();
+    render();
+    showToast("Firebaseの保存データをクリアしました");
+  } catch (error) {
+    showToast(readableError(error));
+  } finally {
+    elements.clearImportedDataButton.disabled = false;
+  }
 }
 
 function persist() {
-  saveTripBoardState(state);
+  if (!state.user || demoMode) return Promise.resolve(false);
+  const snapshot = {
+    bookings: structuredCloneSafe(state.bookings),
+    aiAnalyses: structuredCloneSafe(state.aiAnalyses),
+    trips: structuredCloneSafe(state.trips),
+    settings: structuredCloneSafe(state.settings),
+  };
+  saveQueue = saveQueue
+    .then(() => cloudSync.saveState(snapshot))
+    .catch((error) => showToast(readableError(error)));
+  return saveQueue;
 }
 
 window.addEventListener("online", renderLocalState);
@@ -740,6 +833,24 @@ function bind(selector, eventName, handler) {
 }
 function listen(element, eventName, handler) {
   element?.addEventListener(eventName, handler);
+}
+function requireUser() {
+  if (state.user) return true;
+  showToast("先にGoogleでログインしてください");
+  showView("settings");
+  return false;
+}
+function structuredCloneSafe(value) {
+  return typeof structuredClone === "function"
+    ? structuredClone(value)
+    : JSON.parse(JSON.stringify(value));
+}
+function readableError(error) {
+  const message = String(error?.message || error || "エラーが発生しました。");
+  if (message.includes("popup-closed")) return "認証画面が閉じられました。";
+  if (message.includes("permission-denied")) return "Firestoreのアクセス権限を確認してください。";
+  if (message.includes("network-request-failed")) return "通信に失敗しました。ネットワーク接続を確認してください。";
+  return message.replace(/^Firebase:\s*/, "");
 }
 function emptyState(title, copy, button) {
   return `<div class="empty-state"><strong>${title}</strong><p>${copy}</p><button class="primary-button compact" data-open-sync type="button">${button}</button></div>`;

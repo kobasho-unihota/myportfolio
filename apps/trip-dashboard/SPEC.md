@@ -2,14 +2,16 @@
 
 ## 概要
 
-TripBoardは、ユーザーが選択した予約スクリーンショットをAIで分類・構造化し、航空券とホテルを端末内で管理する個人用PWAである。GitHub Pagesで静的配信し、Gmail API、Firebase Auth、Firestore同期は初期導線では使わない。
+TripBoardは、ユーザーが選択した予約スクリーンショットをAIで分類・構造化し、航空券とホテルをFirebaseで管理する個人用PWAである。GitHub Pagesで静的配信し、Google AuthenticationとFirestoreを利用する。
 
 ## アーキテクチャ
 
 - PWA: スクリーンショット複数選択、画像縮小、Gemini呼び出し、schema validation、予約表示、手修正、手動出張まとめを担当する。
 - Gemini API: 利用者が設定画面でLocalStorageへ保存したAPIキーを使い、PWAから直接呼び出す。
-- LocalStorage: `tripboard:bookings`, `tripboard:ai-analyses`, `tripboard:trips`, `tripboard:settings`, `tripboard:gemini-api-key` を保存する。
+- Firestore: `users/{uid}/tripDashboard/state` に `bookings`, `aiAnalyses`, `trips`, `settings` を単一ドキュメントとして保存する。
+- LocalStorage: `tripboard:gemini-api-key` だけを通常保存する。旧 `bookings`, `aiAnalyses`, `trips`, `settings` は初回移行元としてのみ読む。
 - 画像本体は保存しない。AIへ送信する直前だけブラウザメモリ上で縮小JPEGとして扱う。
+- Firestoreが空で旧localStorageデータがある場合、初回Googleログイン時に自動移行し、成功後に旧データを削除する。
 
 ## AI分類カテゴリ
 
@@ -25,14 +27,14 @@ TripBoardは、ユーザーが選択した予約スクリーンショットをAI
 3. ユーザーは画像ごとに `JAL航空券`、`楽天ホテル`、`AIに判定させる` を選べる。
 4. PWAがGemini APIへ `text prompt + inline_data` を送り、画面内の予約を `reservations` 配列で返させて予約ごとにschema validationする。
 5. 航空券は便名＋出発日時、ホテルは予約番号またはホテル名＋宿泊日で既存bookingと照合し、取り込み済みを除外する。
-6. 新規の `flight` / `hotel` だけ予約データへ変換してlocalStorageへ保存する。低confidence、必須項目不足、分類不能、解析失敗は要確認として残す。
+6. 新規の `flight` / `hotel` だけ予約データへ変換し、AI解析結果、出張まとめ、設定と一緒にFirestoreへ保存する。低confidence、必須項目不足、分類不能、解析失敗は要確認として残す。
 
 ## UI
 
 - 「次の出張」: 保存済み予約から次回予定、タイムライン、警告を表示する。
 - 「予約一覧」: 予定、すべて、取消、AI要確認、出張まとめ候補を表示する。
 - 「解析」: iPhoneの写真選択に適した画像アップロード、サムネイル、種別選択、個別状態、AI解析、選択クリアを提供する。
-- 「設定」: 自宅空港、Gemini APIキー保存/削除、非表示解除、端末保存データ削除、プライバシー説明を提供する。
+- 「設定」: Googleログイン/ログアウト、自宅空港、Gemini APIキー保存/削除、非表示解除、Firebase保存データ削除、プライバシー説明を提供する。
 
 ## 出張まとめ
 
@@ -42,5 +44,6 @@ TripBoardは、ユーザーが選択した予約スクリーンショットをAI
 
 - スクショAI JSON validation、低confidence判定、imageHash生成、AI結果から予約への変換、重複統合を単体テストする。
 - Gemini画像リクエストがinline_dataを含むことをfetch mockで確認する。
-- localStorage保存/読込/クリアを単体テストする。画像本体は保存しない。
+- 旧localStorage移行データの読込/クリアを単体テストする。画像本体は保存しない。
+- Firebase同期はstateドキュメントの読込、保存、ログイン状態、空データ移行をブラウザで確認する。
 - iPhone幅で複数画像選択、プレビュー、種別選択、解析、予約反映、要確認編集を手動確認する。
