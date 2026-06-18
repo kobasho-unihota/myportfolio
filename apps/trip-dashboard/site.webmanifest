@@ -14,7 +14,7 @@
     { "src": "./icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
   ],
   "shortcuts": [
-    { "name": "スクショ解析", "short_name": "解析", "url": "./#sync" },
-    { "name": "出張履歴", "short_name": "履歴", "url": "./#bookings" }
+    { "name": "予約を取り込む", "short_name": "取込", "url": "./#sync" },
+    { "name": "出張を見る", "short_name": "出張", "url": "./#bookings" }
   ]
 }

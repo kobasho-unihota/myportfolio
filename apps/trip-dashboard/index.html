@@ -5,16 +5,16 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#f2f2f7" media="(prefers-color-scheme: light)">
   <meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)">
-  <meta name="description" content="予約スクリーンショットをAIで整理する、iPhone向けトラベルダッシュボード。">
+  <meta name="description" content="出張の次の行動と旅程をすぐ確認できる、iPhone向け出張管理アプリ。">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="TripBoard">
   <meta name="format-detection" content="telephone=no">
-  <title>TripBoard | 予約ダッシュボード</title>
-  <link rel="manifest" href="./site.webmanifest?v=26">
+  <title>TripBoard | 出張管理</title>
+  <link rel="manifest" href="./site.webmanifest?v=31">
   <link rel="icon" href="./icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="./apple-touch-icon.png">
-  <link rel="stylesheet" href="./styles.css?v=28">
+  <link rel="stylesheet" href="./styles.css?v=30">
 </head>
 <body>
   <div class="app-shell">
@@ -37,24 +37,45 @@
 
       <section class="view active" id="homeView">
         <div class="hero">
-          <div><p class="eyebrow" id="todayLabel"></p><h1>次の予定</h1></div>
+          <div><p class="eyebrow" id="todayLabel"></p><h1>今日</h1></div>
         </div>
         <div id="nextTrip"></div>
         <section class="section-block compact-section">
-          <div class="section-heading"><h2>この先の予定</h2><button class="text-button" data-view="bookings" type="button">すべて見る</button></div>
+          <div class="section-heading"><h2>この先の出張</h2><button class="text-button" data-view="bookings" type="button">すべて見る</button></div>
           <div class="trip-list" id="upcomingTrips"></div>
         </section>
       </section>
 
       <section class="view" id="bookingsView">
         <div class="page-heading">
-          <div><p class="eyebrow">TRIP HISTORY</p><h1>出張履歴</h1></div>
-          <button class="primary-button compact" id="addBookingButton" type="button">＋ 追加</button>
+          <div><p class="eyebrow">YOUR TRIPS</p><h1>出張</h1></div>
+          <button class="text-button" data-view="manage" type="button">予約を管理</button>
         </div>
         <div class="history-list" id="tripHistory"></div>
-        <details class="management-panel">
-          <summary>予約データを管理</summary>
-          <div class="management-content">
+      </section>
+
+      <section class="view trip-detail-view" id="detailView">
+        <div class="detail-toolbar">
+          <button class="back-button" id="detailBackButton" type="button" aria-label="前の画面へ戻る">
+            <svg viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"/></svg><span>戻る</span>
+          </button>
+          <button class="icon-button" data-view="manage" type="button" aria-label="予約を管理">
+            <svg viewBox="0 0 24 24"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></svg>
+          </button>
+        </div>
+        <div id="tripDetail"></div>
+      </section>
+
+      <section class="view" id="manageView">
+        <div class="detail-toolbar">
+          <button class="back-button" id="manageBackButton" type="button" aria-label="出張画面へ戻る">
+            <svg viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"/></svg><span>出張</span>
+          </button>
+        </div>
+        <div class="page-heading">
+          <div><p class="eyebrow">BOOKING LIBRARY</p><h1>予約を管理</h1></div>
+          <button class="primary-button compact" id="addBookingButton" type="button">＋ 追加</button>
+        </div>
         <div class="filter-tabs" role="tablist">
           <button class="active" data-filter="active" type="button">予定</button>
           <button data-filter="all" type="button">すべて</button>
@@ -69,8 +90,6 @@
           <div class="review-list" id="tripCandidateList"></div>
         </section>
         <div class="booking-list" id="bookingList"></div>
-          </div>
-        </details>
       </section>
 
       <section class="view sync-view" id="syncView">
@@ -96,6 +115,10 @@
           <small id="syncProgressText"></small>
         </div>
         <small class="last-sync" id="lastSyncLabel">まだ解析されていません</small>
+        <section class="inbox-review">
+          <div class="section-heading"><div><p class="eyebrow">INBOX</p><h2>確認が必要</h2></div></div>
+          <div class="review-list" id="inboxReviewList"></div>
+        </section>
       </section>
 
       <section class="view" id="settingsView">
@@ -138,8 +161,8 @@
   </div>
 
   <nav class="bottom-nav" aria-label="メインメニュー">
-    <button class="active" data-view="home" type="button"><svg viewBox="0 0 24 24"><path d="m3 11 9-8 9 8v10h-6v-6H9v6H3Z"/></svg><span>ホーム</span></button>
-    <button data-view="bookings" type="button"><svg viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="M8 2v4M16 2v4M4 9h16M8 13h3M8 17h7"/></svg><span>履歴</span></button>
+    <button class="active" data-view="home" type="button"><svg viewBox="0 0 24 24"><path d="M5 12.5 9.5 17 19 7.5"/></svg><span>今日</span></button>
+    <button data-view="bookings" type="button"><svg viewBox="0 0 24 24"><path d="M5 4h14v16H5zM8 8h8M8 12h8M8 16h5"/></svg><span>出張</span></button>
     <button data-view="sync" type="button"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="3"/><circle cx="8" cy="10" r="1.5"/><path d="m21 15-5-5L5 19"/></svg><span>取込</span></button>
   </nav>
 
@@ -174,6 +197,6 @@
   </dialog>
 
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
-  <script type="module" src="./app.mjs?v=28"></script>
+  <script type="module" src="./app.mjs?v=30"></script>
 </body>
 </html>

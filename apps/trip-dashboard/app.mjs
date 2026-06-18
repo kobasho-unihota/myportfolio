@@ -23,6 +23,8 @@ const state = {
   screenshotItems: [],
   bookingFilter: "active",
   isAnalyzing: false,
+  selectedTripKey: "",
+  previousView: "home",
 };
 let migrationAttempted = false;
 let saveQueue = Promise.resolve();
@@ -50,6 +52,8 @@ bind("[data-close]", "click", () => elements.bookingDialog.close());
 
 listen(elements.heroSyncButton, "click", () => showView("sync"));
 listen(elements.settingsButton, "click", () => showView("settings"));
+listen(elements.detailBackButton, "click", () => showView(state.previousView || "home"));
+listen(elements.manageBackButton, "click", () => showView("bookings"));
 listen(elements.screenshotInput, "change", handleScreenshotSelection);
 listen(elements.analyzeScreenshotsButton, "click", analyzeSelectedScreenshots);
 listen(elements.clearScreenshotsButton, "click", clearScreenshotSelection);
@@ -64,8 +68,18 @@ listen(elements.resetHiddenButton, "click", resetHiddenBookings);
 listen(elements.clearImportedDataButton, "click", clearImportedData);
 listen(elements.bookingList, "click", handleBookingAction);
 listen(elements.reviewList, "click", handleReviewAction);
+listen(elements.inboxReviewList, "click", handleReviewAction);
 listen(elements.tripCandidateList, "click", handleTripAction);
 listen(elements.screenshotList, "change", handleScreenshotKindChange);
+listen(elements.nextTrip, "click", handleTripOpen);
+listen(elements.upcomingTrips, "click", handleTripOpen);
+listen(elements.tripHistory, "click", handleTripOpen);
+document.addEventListener("keydown", (event) => {
+  if ((event.key === "Enter" || event.key === " ") && event.target.matches("[data-trip-key]")) {
+    event.preventDefault();
+    handleTripOpen(event);
+  }
+});
 
 elements.todayLabel.textContent = new Intl.DateTimeFormat("ja-JP", {
   year: "numeric", month: "long", day: "numeric", weekday: "long",
@@ -276,10 +290,12 @@ function setAnalyzing(active, label = "処理中", detail = "") {
 }
 
 function showView(name) {
+  const current = document.querySelector(".view.active")?.id.replace("View", "") || "home";
+  if (name === "detail") state.previousView = ["home", "bookings"].includes(current) ? current : state.previousView;
   document.querySelectorAll(".view").forEach((view) => view.classList.toggle("active", view.id === `${name}View`));
   document.querySelectorAll(".bottom-nav [data-view]").forEach((button) => button.classList.toggle("active", button.dataset.view === name));
   elements.settingsButton?.classList.toggle("active", name === "settings");
-  document.body.classList.toggle("settings-open", name === "settings");
+  document.body.classList.toggle("subview-open", ["settings", "detail", "manage"].includes(name));
   document.querySelector(".app-shell")?.scrollTo({ top: 0, behavior: "smooth" });
   history.replaceState(null, "", `#${name}`);
 }
@@ -294,6 +310,7 @@ function render() {
   renderScreenshotItems();
   renderTrips();
   renderTripHistory();
+  renderTripDetail();
   renderBookings();
   renderReviewItems();
   renderTripCandidates();
@@ -414,7 +431,7 @@ function dashboardCard(trip) {
   const latestBookingUpdate = Math.max(...trip.items.map((item) => Date.parse(item.updatedAt || 0)).filter(Number.isFinite), 0);
   const updatedAt = state.settings.lastAnalyzedAt || (latestBookingUpdate ? new Date(latestBookingUpdate).toISOString() : "");
   const updated = updatedAt ? relativeUpdatedAt(updatedAt) : "未更新";
-  return `<article class="dashboard-card">
+  return `<article class="dashboard-card trip-launch" data-trip-key="${escapeAttribute(tripKey(trip))}" tabindex="0" role="button" aria-label="${escapeAttribute(inferTripTitle(trip.items))}の詳細を開く">
     <header class="dashboard-head">
       <div><span>次の移動</span><strong>${dateTimeSafe(nextAt)}</strong></div>
       <b>${countdown}</b>
@@ -426,7 +443,7 @@ function dashboardCard(trip) {
     </div>
     <footer class="dashboard-status">
       <span class="${reviewCount ? "needs-review" : "confirmed"}"><i></i>${reviewCount ? `${reviewCount}件を要確認` : `予約${confirmed}件すべて確認済み`}</span>
-      <small>最終更新 ${updated}</small>
+      <small>最終更新 ${updated}　›</small>
     </footer>
   </article>`;
 }
@@ -610,7 +627,7 @@ function timelineItem(booking, direction = "") {
 function tripMini(trip) {
   const flights = trip.items.filter((item) => item.type === "flight").length;
   const hotels = trip.items.filter((item) => item.type === "hotel").length;
-  return `<article class="trip-mini">
+  return `<article class="trip-mini trip-launch" data-trip-key="${escapeAttribute(tripKey(trip))}" tabindex="0" role="button">
     <div><time>${dateOnlySafe(trip.startAt)}</time><h3>${escapeHtml(inferTripTitle(trip.items))}</h3></div>
     <p>${[flights ? `フライト${flights}件` : "", hotels ? `ホテル${hotels}件` : ""].filter(Boolean).join("・")}</p>
   </article>`;
@@ -642,7 +659,7 @@ function historyCard(trip) {
   const status = Date.parse(trip.endAt) < now ? "完了" : Date.parse(trip.startAt) <= now ? "進行中" : "予定";
   const flights = trip.items.filter((item) => item.type === "flight");
   const hotel = trip.items.find((item) => item.type === "hotel");
-  return `<article class="history-card">
+  return `<article class="history-card trip-launch" data-trip-key="${escapeAttribute(tripKey(trip))}" tabindex="0" role="button">
     <div class="history-date"><strong>${new Date(trip.startAt).getDate()}</strong><span>${new Intl.DateTimeFormat("ja-JP", { weekday: "short" }).format(new Date(trip.startAt))}</span></div>
     <div class="history-copy">
       <div><strong>${escapeHtml(inferTripTitle(trip.items))}</strong><span class="history-status ${status === "進行中" ? "current" : ""}">${status}</span></div>
@@ -650,6 +667,78 @@ function historyCard(trip) {
       <small>${[flights.length ? `フライト ${flights.length}` : "", hotel?.data.name || ""].filter(Boolean).join(" ・ ")}</small>
     </div>
   </article>`;
+}
+
+function tripKey(trip) {
+  return trip.id || trip.items.map((item) => item.id).sort().join("__");
+}
+
+function handleTripOpen(event) {
+  const target = event.target.closest("[data-trip-key]");
+  if (!target) return;
+  state.selectedTripKey = target.dataset.tripKey;
+  renderTripDetail();
+  showView("detail");
+}
+
+function renderTripDetail() {
+  if (!elements.tripDetail) return;
+  const trips = displayTrips();
+  const trip = trips.find((item) => tripKey(item) === state.selectedTripKey) || trips[0];
+  if (!trip) {
+    elements.tripDetail.innerHTML = `<div class="empty-state"><strong>表示できる出張がありません</strong><p>予約を取り込むと旅程がここに表示されます。</p></div>`;
+    return;
+  }
+  state.selectedTripKey = tripKey(trip);
+  const warnings = bookingWarnings(trip);
+  const days = Math.max(1, Math.ceil((Date.parse(trip.endAt) - Date.parse(trip.startAt)) / 86400000));
+  elements.tripDetail.innerHTML = `
+    <header class="detail-hero">
+      <span>${formatDateRange(trip.startAt, trip.endAt)}・${days}日間</span>
+      <h1>${escapeHtml(inferTripTitle(trip.items))}</h1>
+      <p>${trip.items.length}件の予約${warnings.length ? `・${warnings.length}件を要確認` : "・確認済み"}</p>
+    </header>
+    <section class="itinerary-section">
+      <h2>旅程</h2>
+      <div class="itinerary">${itineraryItems(trip).join("")}</div>
+    </section>
+    ${warnings.length ? `<section class="detail-alert"><strong>確認が必要です</strong><ul>${warnings.map((warning) => `<li>${escapeHtml(warning)}</li>`).join("")}</ul></section>` : ""}
+    <button class="secondary-button detail-manage-button" data-view="manage" type="button">予約内容を編集</button>`;
+  elements.tripDetail.querySelector("[data-view='manage']")?.addEventListener("click", () => showView("manage"));
+}
+
+function itineraryItems(trip) {
+  const flights = trip.items.filter((item) => item.type === "flight");
+  return trip.items.flatMap((item) => {
+    if (item.type === "flight") {
+      const data = item.data;
+      const direction = flightDirection(item, flights);
+      return [
+        itineraryPoint(data.startAt, data.origin, `${direction}・${data.flightNumber || "航空券"}${data.seat ? `・座席 ${data.seat}` : ""}`, "flight"),
+        itineraryTravel(data.startAt, data.endAt, data.flightNumber || "フライト"),
+        itineraryPoint(data.endAt, data.destination, "到着", "arrival"),
+      ];
+    }
+    const data = item.data;
+    return [
+      itineraryPoint(data.checkIn, data.name || "ホテル", `チェックイン${data.roomType ? `・${data.roomType}` : ""}`, "hotel"),
+      itineraryPoint(data.checkOut, data.name || "ホテル", "チェックアウト", "checkout"),
+    ];
+  });
+}
+
+function itineraryPoint(at, title, detail, type) {
+  return `<article class="itinerary-point ${type}">
+    <time>${dateTimeSafe(at)}</time>
+    <span class="timeline-dot">${type === "hotel" ? hotelIcon() : type === "flight" ? flightIcon() : ""}</span>
+    <div><strong>${escapeHtml(shortAirport(title) || title)}</strong><p>${escapeHtml(detail)}</p></div>
+  </article>`;
+}
+
+function itineraryTravel(startAt, endAt, label) {
+  const minutes = Math.max(0, Math.round((Date.parse(endAt) - Date.parse(startAt)) / 60000));
+  const duration = minutes ? `${Math.floor(minutes / 60)}時間${minutes % 60 ? `${minutes % 60}分` : ""}` : label;
+  return `<div class="itinerary-travel"><span></span><small>${duration}</small></div>`;
 }
 
 function renderBookings() {
@@ -682,9 +771,11 @@ function renderReviewItems() {
   const reviewItems = state.aiAnalyses
     .filter(analysisNeedsReview)
     .sort((a, b) => Date.parse(b.updatedAt || 0) - Date.parse(a.updatedAt || 0));
-  elements.reviewList.innerHTML = reviewItems.length
+  const markup = reviewItems.length
     ? reviewItems.map(reviewCard).join("")
     : `<div class="empty-state"><strong>要確認はありません</strong><p>低confidence、分類不能、解析失敗のメールがここに残ります。</p></div>`;
+  elements.reviewList.innerHTML = markup;
+  elements.inboxReviewList.innerHTML = markup;
 }
 
 function reviewCard(analysis) {
@@ -1007,7 +1098,7 @@ window.addEventListener("online", renderLocalState);
 window.addEventListener("offline", renderLocalState);
 if ("serviceWorker" in navigator && location.protocol !== "file:") navigator.serviceWorker.register("./sw.js").catch(() => {});
 const initialView = location.hash.replace("#", "");
-if (["home", "bookings", "sync", "settings"].includes(initialView)) showView(initialView);
+if (["home", "bookings", "sync", "settings", "manage", "detail"].includes(initialView)) showView(initialView);
 
 function bind(selector, eventName, handler) {
   document.querySelectorAll(selector).forEach((element) => element.addEventListener(eventName, (event) => handler(event, element)));
