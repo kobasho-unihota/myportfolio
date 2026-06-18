@@ -141,7 +141,8 @@ export function normalizeScreenshotAnalysis(raw, image = {}, options = {}) {
   const imageId = String(raw?.imageId || image.imageId || (imageHash ? `image-${imageHash.replace(/^fnv1a-/, "")}` : ""));
   const messageId = String(raw?.messageId || options.messageId || imageId);
   const category = AI_CATEGORIES.includes(raw?.category) ? raw.category : categoryFromSourceKind(sourceKind);
-  const extracted = screenshotExtracted(category, raw?.extracted || raw || {}, sourceKind);
+  const receivedAt = image.receivedAt || options.now || new Date().toISOString();
+  const extracted = screenshotExtracted(category, raw?.extracted || raw || {}, sourceKind, receivedAt);
   return normalizeAnalysis({
     category,
     confidence: raw?.confidence,
@@ -161,7 +162,7 @@ export function normalizeScreenshotAnalysis(raw, image = {}, options = {}) {
     threadId: imageId,
     subject: screenshotSubject(sourceKind),
     from: "",
-    receivedAt: image.receivedAt || options.now || new Date().toISOString(),
+    receivedAt,
     sourceHash: imageHash,
     model: raw?.model || options.model || "",
     schemaVersion: AI_SCHEMA_VERSION,
@@ -169,7 +170,7 @@ export function normalizeScreenshotAnalysis(raw, image = {}, options = {}) {
     id: imageId,
     threadId: imageId,
     subject: screenshotSubject(sourceKind),
-    receivedAt: image.receivedAt || options.now || new Date().toISOString(),
+    receivedAt,
   }, { ...options, sourceHash: imageHash, sourceType: "screenshot", imageId, imageHash, sourceKind });
 }
 
@@ -433,7 +434,7 @@ function normalizeExtracted(category, value) {
   };
 }
 
-function screenshotExtracted(category, value, sourceKind) {
+function screenshotExtracted(category, value, sourceKind, referenceDate = "") {
   const input = value && typeof value === "object" ? value : {};
   if (category === "flight") {
     const airline = String(input.airline || input.provider || (sourceKind === "flight_screenshot" ? "JAL" : ""));
@@ -443,8 +444,8 @@ function screenshotExtracted(category, value, sourceKind) {
     const arrivalTime = String(input.arrivalTime || "");
     const origin = String(input.departureAirport || input.origin || "");
     const destination = String(input.arrivalAirport || input.destination || "");
-    const startAt = combineScreenshotDateTime(departureDate, departureTime);
-    const endAt = combineScreenshotDateTime(departureDate, arrivalTime, startAt);
+    const startAt = combineScreenshotDateTime(departureDate, departureTime, "", referenceDate);
+    const endAt = combineScreenshotDateTime(departureDate, arrivalTime, startAt, referenceDate);
     const dedupeKey = [airline, flightNumber, departureDate, departureTime, origin, destination].join("|");
     return {
       provider: airline,
@@ -468,8 +469,8 @@ function screenshotExtracted(category, value, sourceKind) {
   }
   if (category === "hotel") {
     const name = String(input.hotelName || input.name || "");
-    const checkIn = combineScreenshotDateTime(input.checkInDate || input.checkIn || "", input.checkInTime || "");
-    const checkOut = combineScreenshotDateTime(input.checkOutDate || input.checkOut || "", "");
+    const checkIn = combineScreenshotDateTime(input.checkInDate || input.checkIn || "", input.checkInTime || "", "", referenceDate);
+    const checkOut = combineScreenshotDateTime(input.checkOutDate || input.checkOut || "", "", "", referenceDate);
     const reservationNumber = String(input.reservationNumber || "");
     return {
       provider: String(input.provider || (sourceKind === "hotel_screenshot" ? "楽天トラベル" : "")),
@@ -554,16 +555,12 @@ function screenshotSummary(category, extracted) {
   return extracted.note || "スクリーンショット解析結果";
 }
 
-function combineScreenshotDateTime(dateValue, timeValue, referenceStart = "") {
+function combineScreenshotDateTime(dateValue, timeValue, referenceStart = "", referenceDate = "") {
   const dateText = String(dateValue || "").trim();
   if (!dateText) return "";
   if (/T\d{2}:\d{2}/.test(dateText)) return normalizeIso(dateText);
-  const normalizedDate = dateText
-    .replace(/[年月.]/g, "-")
-    .replace(/日/g, "")
-    .replace(/\//g, "-")
-    .replace(/-+/g, "-")
-    .replace(/^-|-$/g, "");
+  const normalizedDate = normalizeScreenshotDate(dateText, referenceDate);
+  if (!normalizedDate) return "";
   const timeText = String(timeValue || "").trim();
   const normalizedTime = /^\d{1,2}:\d{2}/.test(timeText) ? timeText.match(/\d{1,2}:\d{2}/)[0] : "00:00";
   const iso = normalizeIso(`${normalizedDate}T${normalizedTime}:00+09:00`);
@@ -575,6 +572,35 @@ function combineScreenshotDateTime(dateValue, timeValue, referenceStart = "") {
     return end.toISOString();
   }
   return iso;
+}
+
+function normalizeScreenshotDate(value, referenceDate = "") {
+  const text = String(value || "")
+    .trim()
+    .replace(/[（(][^）)]*[）)]/g, "")
+    .replace(/,/g, "");
+  const full = text.match(/(20\d{2})\s*[年./-]\s*(\d{1,2})\s*[月./-]\s*(\d{1,2})/);
+  if (full) return dateParts(Number(full[1]), Number(full[2]), Number(full[3]));
+  const numeric = text.match(/^(20\d{2})-(\d{1,2})-(\d{1,2})$/);
+  if (numeric) return dateParts(Number(numeric[1]), Number(numeric[2]), Number(numeric[3]));
+  const partial = text.match(/(\d{1,2})\s*[月./-]\s*(\d{1,2})/);
+  if (!partial) return "";
+  const month = Number(partial[1]);
+  const day = Number(partial[2]);
+  const base = new Date(referenceDate || Date.now());
+  if (Number.isNaN(base.getTime())) return "";
+  let year = base.getFullYear();
+  const candidate = new Date(year, month - 1, day);
+  const difference = candidate.getTime() - base.getTime();
+  if (difference < -120 * 86400000) year += 1;
+  if (difference > 300 * 86400000) year -= 1;
+  return dateParts(year, month, day);
+}
+
+function dateParts(year, month, day) {
+  const date = new Date(Date.UTC(year, month - 1, day));
+  if (date.getUTCFullYear() !== year || date.getUTCMonth() !== month - 1 || date.getUTCDate() !== day) return "";
+  return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
 }
 
 function normalizeStatus(status, category, confidence, issues) {

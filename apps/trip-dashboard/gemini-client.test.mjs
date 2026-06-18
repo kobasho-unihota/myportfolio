@@ -74,6 +74,7 @@ test("Gemini画像解析はinline_dataでスクショを送る", async (context)
     assert.equal(body.generationConfig.responseMimeType, "application/json");
     assert.ok(parts[0].text.includes("JAL"));
     assert.ok(parts[0].text.includes("複数"));
+    assert.ok(parts[0].text.includes("2026-06-18"));
     assert.ok(body.generationConfig.responseSchema.required.includes("reservations"));
     assert.equal(parts[1].inline_data.mime_type, "image/jpeg");
     assert.equal(parts[1].inline_data.data, "abc123");
@@ -112,6 +113,7 @@ test("Gemini画像解析はinline_dataでスクショを送る", async (context)
     image: { base64: "abc123", mimeType: "image/jpeg" },
     sourceKind: "flight_screenshot",
     imageHash: "fnv1a-12345678",
+    analyzedAt: "2026-06-18T00:00:00.000Z",
   });
   assert.equal(result.analysis.sourceType, "screenshot");
   assert.equal(result.analysis.imageId, "image-12345678");

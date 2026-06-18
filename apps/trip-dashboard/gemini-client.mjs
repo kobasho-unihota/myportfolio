@@ -64,7 +64,7 @@ export async function classifyTripEmailWithGemini({ apiKey, message, body, sourc
   }
 }
 
-export async function classifyTripScreenshotWithGemini({ apiKey, image, sourceKind = "unknown_screenshot", imageHash = "" }) {
+export async function classifyTripScreenshotWithGemini({ apiKey, image, sourceKind = "unknown_screenshot", imageHash = "", analyzedAt = "" }) {
   if (!apiKey) throw new Error("設定画面からGemini APIキーを登録してください。");
   if (!image?.base64 || !image?.mimeType) throw new Error("AI解析に必要なスクリーンショットがありません。");
   const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${encodeURIComponent(apiKey)}`, {
@@ -79,7 +79,7 @@ export async function classifyTripScreenshotWithGemini({ apiKey, image, sourceKi
       contents: [{
         role: "user",
         parts: [
-          { text: screenshotPromptFor(sourceKind) },
+          { text: screenshotPromptFor(sourceKind, analyzedAt) },
           {
             inline_data: {
               mime_type: image.mimeType,
@@ -201,17 +201,21 @@ function responseSchema() {
   };
 }
 
-function screenshotPromptFor(sourceKind) {
+function screenshotPromptFor(sourceKind, analyzedAt = "") {
   const hint = {
     flight_screenshot: "これはJALの予約一覧または予約詳細スクリーンショットです。航空券として抽出してください。",
     hotel_screenshot: "これは楽天トラベルの予約詳細スクリーンショットです。ホテル予約として抽出してください。",
     unknown_screenshot: "これは出張予約に関係する可能性があるスクリーンショットです。JAL航空券、楽天ホテル、要確認、対象外のどれかに分類してください。",
   }[sourceKind] || "予約スクリーンショットを分類してください。";
+  const referenceDate = formatReferenceDate(analyzedAt);
   return `あなたは個人用PWA TripBoard のために、日本語の予約スクリーンショットを分類・構造化します。
 返答はJSONオブジェクトのみ。Markdownや説明文は禁止。
 
 入力ヒント:
 ${hint}
+
+解析基準日:
+${referenceDate}
 
 カテゴリ:
 - flight: JAL航空券、搭乗予定、予約一覧、予約詳細
@@ -226,11 +230,23 @@ ${hint}
 - 往路と復路、複数日、スクロール一覧に見える各予約を別要素として返す。
 - 各予約のconfidenceは0から1。
 - warningsは必ず配列で返し、読めない項目や矛盾を入れる。
-- 日付はYYYY-MM-DD、時刻はHH:mmで返す。年が画面にない場合だけ、画面内にある他の文脈から明確なら補う。不明なら空文字。
+- 日付は必ずYYYY-MM-DD、時刻はHH:mmで返す。
+- 年が画面にない場合は解析基準日と、「出発まであとN日」の表示を使って年を補完する。例えば解析基準日が2026-06-18で「6月24日・あと6日」なら2026-06-24。
 - JAL航空券は flightNumber, departureDate, departureTime, arrivalTime, departureAirport, arrivalAirport を優先する。
 - 楽天ホテルは hotelName, checkInDate, checkOutDate, reservationNumber, planName, guestName, checkInTime を優先する。
 - ホテル名に住所や郵便番号を混ぜない。
 - statusはconfirmedまたはcancelled。取消・キャンセル画面ならcancelled。`;
+}
+
+function formatReferenceDate(value) {
+  const date = new Date(value || Date.now());
+  if (Number.isNaN(date.getTime())) return new Date().toISOString().slice(0, 10);
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Tokyo",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(date);
 }
 
 function screenshotResponseSchema() {

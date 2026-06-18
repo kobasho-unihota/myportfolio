@@ -7,9 +7,9 @@ import {
   makeScreenshotSource,
   normalizeScreenshotAnalyses,
   validateScreenshotAnalysis,
-} from "./ai-core.mjs?v=19";
+} from "./ai-core.mjs?v=21";
 import { bookingWarnings, effectiveBooking, mergeBookings } from "./core.mjs?v=14";
-import { classifyTripScreenshotWithGemini, clearGeminiApiKey, getGeminiApiKey, saveGeminiApiKey } from "./gemini-client.mjs?v=19";
+import { classifyTripScreenshotWithGemini, clearGeminiApiKey, getGeminiApiKey, saveGeminiApiKey } from "./gemini-client.mjs?v=21";
 import { cloudSync } from "./firebase-sync.mjs?v=20";
 import { hasMigrationData, isEmptyCloudState } from "./firebase-state.mjs?v=20";
 import { clearMigratedTripBoardData, loadTripBoardState } from "./local-store.mjs?v=20";
@@ -166,6 +166,7 @@ async function analyzeSelectedScreenshots() {
           image: { base64: item.base64, mimeType: item.mimeType },
           sourceKind: item.sourceKind,
           imageHash: item.imageHash,
+          analyzedAt: item.receivedAt,
         });
         const analyses = normalizeScreenshotAnalyses(response.analysis || response, makeScreenshotSource(item), {
           imageHash: item.imageHash,
@@ -216,6 +217,12 @@ function reflectApprovedAnalyses(analyses) {
 }
 
 function reflectScreenshotAnalyses(analyses) {
+  const analyzedImageIds = new Set(analyses.map((analysis) => analysis.imageId).filter(Boolean));
+  state.bookings = state.bookings.filter((booking) => {
+    if (!analyzedImageIds.has(booking.screenshot?.imageId)) return true;
+    const data = effectiveBooking(booking).data;
+    return Boolean(data.startAt || data.checkIn);
+  });
   const candidates = analysesToBookings(analyses.filter((analysis) => ["flight", "hotel"].includes(analysis.category)));
   const { bookings: nextBookings, skipped } = excludeImportedBookings(state.bookings, candidates);
   const skippedAnalysisIds = new Set(skipped.map((booking) => booking.ai?.messageId).filter(Boolean));

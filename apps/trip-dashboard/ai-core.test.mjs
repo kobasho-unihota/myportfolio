@@ -154,6 +154,55 @@ test("JALスクショAI JSONをflight bookingへ変換する", () => {
   assert.equal(booking.screenshot.imageId, "image-12345678");
 });
 
+test("年なしのJAL日付を解析基準年で補完する", () => {
+  const analysis = normalizeScreenshotAnalysis({
+    category: "flight",
+    confidence: 0.9,
+    sourceKind: "flight_screenshot",
+    extracted: {
+      airline: "JAL",
+      flightNumber: "JAL304",
+      departureDate: "6月24日（水）",
+      departureTime: "08:10",
+      arrivalTime: "09:50",
+      departureAirport: "福岡",
+      arrivalAirport: "東京（羽田）",
+    },
+    warnings: [],
+  }, {
+    imageHash: "fnv1a-yearless1",
+    receivedAt: "2026-06-18T00:00:00.000Z",
+  });
+
+  assert.equal(validateScreenshotAnalysis(analysis).ok, true);
+  const [booking] = analysesToBookings([analysis]);
+  assert.equal(booking.parsed.startAt, "2026-06-23T23:10:00.000Z");
+  assert.equal(booking.parsed.endAt, "2026-06-24T00:50:00.000Z");
+});
+
+test("年末の年なし日付は翌年として補完する", () => {
+  const analysis = normalizeScreenshotAnalysis({
+    category: "flight",
+    confidence: 0.9,
+    sourceKind: "flight_screenshot",
+    extracted: {
+      airline: "JAL",
+      flightNumber: "JAL100",
+      departureDate: "1/5",
+      departureTime: "08:00",
+      arrivalTime: "09:30",
+      departureAirport: "福岡",
+      arrivalAirport: "羽田",
+    },
+  }, {
+    imageHash: "fnv1a-newyear1",
+    receivedAt: "2026-12-28T00:00:00.000Z",
+  });
+
+  const [booking] = analysesToBookings([analysis]);
+  assert.equal(booking.parsed.startAt, "2027-01-04T23:00:00.000Z");
+});
+
 test("楽天スクショAI JSONをhotel bookingへ変換する", () => {
   const analysis = normalizeScreenshotAnalysis({
     category: "hotel",
