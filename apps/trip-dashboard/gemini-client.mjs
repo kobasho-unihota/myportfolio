@@ -67,6 +67,35 @@ export async function classifyTripEmailWithGemini({ apiKey, message, body, sourc
 export async function classifyTripScreenshotWithGemini({ apiKey, image, sourceKind = "unknown_screenshot", imageHash = "", analyzedAt = "" }) {
   if (!apiKey) throw new Error("設定画面からGemini APIキーを登録してください。");
   if (!image?.base64 || !image?.mimeType) throw new Error("AI解析に必要なスクリーンショットがありません。");
+  const first = await requestScreenshotAnalysis({
+    apiKey,
+    image,
+    prompt: screenshotPromptFor(sourceKind, analyzedAt),
+  });
+  const missing = missingScreenshotFields(first);
+  const parsed = missing.length
+    ? mergeScreenshotResponses(first, await requestScreenshotAnalysis({
+      apiKey,
+      image,
+      prompt: screenshotRetryPromptFor(sourceKind, analyzedAt, missing),
+    }))
+    : first;
+  return {
+    analysis: {
+      ...parsed,
+      sourceType: "screenshot",
+      sourceKind,
+      imageHash,
+      imageId: imageHash ? `image-${String(imageHash).replace(/^fnv1a-/, "")}` : "",
+      messageId: imageHash ? `image-${String(imageHash).replace(/^fnv1a-/, "")}` : "",
+      sourceHash: imageHash,
+      model: GEMINI_MODEL,
+    },
+    model: GEMINI_MODEL,
+  };
+}
+
+async function requestScreenshotAnalysis({ apiKey, image, prompt }) {
   const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${encodeURIComponent(apiKey)}`, {
     method: "POST",
     headers: { "content-type": "application/json" },
@@ -79,7 +108,7 @@ export async function classifyTripScreenshotWithGemini({ apiKey, image, sourceKi
       contents: [{
         role: "user",
         parts: [
-          { text: screenshotPromptFor(sourceKind, analyzedAt) },
+          { text: prompt },
           {
             inline_data: {
               mime_type: image.mimeType,
@@ -98,19 +127,7 @@ export async function classifyTripScreenshotWithGemini({ apiKey, image, sourceKi
   const text = data.candidates?.[0]?.content?.parts?.map((part) => part.text || "").join("") || "";
   if (!text) throw new Error("Geminiから空の応答が返りました。");
   try {
-    return {
-      analysis: {
-        ...JSON.parse(text),
-        sourceType: "screenshot",
-        sourceKind,
-        imageHash,
-        imageId: imageHash ? `image-${String(imageHash).replace(/^fnv1a-/, "")}` : "",
-        messageId: imageHash ? `image-${String(imageHash).replace(/^fnv1a-/, "")}` : "",
-        sourceHash: imageHash,
-        model: GEMINI_MODEL,
-      },
-      model: GEMINI_MODEL,
-    };
+    return JSON.parse(text);
   } catch {
     throw new Error("Geminiの応答をJSONとして読み取れませんでした。");
   }
@@ -232,10 +249,65 @@ ${referenceDate}
 - warningsは必ず配列で返し、読めない項目や矛盾を入れる。
 - 日付は必ずYYYY-MM-DD、時刻はHH:mmで返す。
 - 年が画面にない場合は解析基準日と、「出発まであとN日」の表示を使って年を補完する。例えば解析基準日が2026-06-18で「6月24日・あと6日」なら2026-06-24。
-- JAL航空券は flightNumber, departureDate, departureTime, arrivalTime, departureAirport, arrivalAirport を優先する。
+- JALのカードは左側が出発空港と出発時刻、右側が到着空港と到着時刻、上部右側が便名と日付である。
+- JAL航空券は flightNumber, departureDate, departureTime, arrivalTime, departureAirport, arrivalAirport を必ず個別に確認する。
+- 「1時間40分」「1時間55分」などの所要時間はdurationMinutesへ分単位で入れる。
 - 楽天ホテルは hotelName, checkInDate, checkOutDate, reservationNumber, planName, guestName, checkInTime を優先する。
 - ホテル名に住所や郵便番号を混ぜない。
 - statusはconfirmedまたはcancelled。取消・キャンセル画面ならcancelled。`;
+}
+
+function screenshotRetryPromptFor(sourceKind, analyzedAt, missing) {
+  return `${screenshotPromptFor(sourceKind, analyzedAt)}
+
+前回の読み取りでは次の重要項目が空でした:
+${missing.join("\n")}
+
+画像をもう一度拡大して確認し、reservations全体を完全なJSONとして返してください。
+JALカードでは中央線の左と右を混同せず、右側の空港コード・空港名・時刻をarrivalAirportとarrivalTimeへ入れてください。
+見えている到着時刻を00:00に置換しないでください。`;
+}
+
+function missingScreenshotFields(result) {
+  const missing = [];
+  (result?.reservations || []).forEach((reservation, index) => {
+    if (reservation.category !== "flight") return;
+    const extracted = reservation.extracted || {};
+    ["flightNumber", "departureDate", "departureTime", "arrivalTime", "departureAirport", "arrivalAirport"].forEach((field) => {
+      if (!String(extracted[field] || "").trim()) missing.push(`予約${index + 1}: ${field}`);
+    });
+  });
+  return missing;
+}
+
+function mergeScreenshotResponses(first, retry) {
+  const firstReservations = Array.isArray(first?.reservations) ? first.reservations : [];
+  const retryReservations = Array.isArray(retry?.reservations) ? retry.reservations : [];
+  const reservations = retryReservations.map((reservation, index) => {
+    const previous = firstReservations.find((item) =>
+      item?.extracted?.flightNumber &&
+      item.extracted.flightNumber === reservation?.extracted?.flightNumber) || firstReservations[index] || {};
+    return {
+      ...previous,
+      ...reservation,
+      extracted: fillEmptyValues(reservation.extracted || {}, previous.extracted || {}),
+      warnings: Array.isArray(reservation.warnings) ? reservation.warnings : [],
+    };
+  });
+  return {
+    ...first,
+    ...retry,
+    reservations: reservations.length ? reservations : firstReservations,
+    warnings: Array.isArray(retry?.warnings) ? retry.warnings : [],
+  };
+}
+
+function fillEmptyValues(primary, fallback) {
+  const result = { ...primary };
+  Object.entries(fallback).forEach(([key, value]) => {
+    if (result[key] === "" || result[key] === null || result[key] === undefined) result[key] = value;
+  });
+  return result;
 }
 
 function formatReferenceDate(value) {
@@ -269,6 +341,12 @@ function screenshotResponseSchema() {
             reservationNumber: { type: "string" },
             extracted: {
               type: "object",
+              required: [
+                "airline", "flightNumber", "departureDate", "departureTime", "arrivalTime",
+                "departureAirport", "arrivalAirport", "reservationNumber", "durationMinutes",
+                "hotelName", "checkInDate", "checkOutDate", "nights", "address", "planName",
+                "guestName", "checkInTime", "status"
+              ],
               properties: {
                 airline: { type: "string" },
                 flightNumber: { type: "string" },
@@ -277,6 +355,7 @@ function screenshotResponseSchema() {
                 arrivalTime: { type: "string" },
                 departureAirport: { type: "string" },
                 arrivalAirport: { type: "string" },
+                durationMinutes: { type: "number" },
                 hotelName: { type: "string" },
                 checkInDate: { type: "string" },
                 checkOutDate: { type: "string" },

@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   analysesToBookings,
   analysisNeedsReview,
+  bookingHasRequiredFields,
   cacheMatches,
   excludeImportedBookings,
   hashBytes,
@@ -178,6 +179,52 @@ test("年なしのJAL日付を解析基準年で補完する", () => {
   const [booking] = analysesToBookings([analysis]);
   assert.equal(booking.parsed.startAt, "2026-06-23T23:10:00.000Z");
   assert.equal(booking.parsed.endAt, "2026-06-24T00:50:00.000Z");
+});
+
+test("到着時刻が空でも所要時間から着陸日時を補完する", () => {
+  const analysis = normalizeScreenshotAnalysis({
+    category: "flight",
+    confidence: 0.9,
+    sourceKind: "flight_screenshot",
+    extracted: {
+      airline: "JAL",
+      flightNumber: "JAL304",
+      departureDate: "6月24日",
+      departureTime: "08:10",
+      arrivalTime: "",
+      durationMinutes: 100,
+      departureAirport: "福岡",
+      arrivalAirport: "東京（羽田）",
+    },
+  }, {
+    imageHash: "fnv1a-duration1",
+    receivedAt: "2026-06-18T00:00:00.000Z",
+  });
+
+  assert.equal(validateScreenshotAnalysis(analysis).ok, true);
+  const [booking] = analysesToBookings([analysis]);
+  assert.equal(booking.parsed.endAt, "2026-06-24T00:50:00.000Z");
+});
+
+test("到着空港や到着時刻がない既存便は再解析で置換対象にする", () => {
+  assert.equal(bookingHasRequiredFields({
+    type: "flight",
+    parsed: {
+      flightNumber: "JAL304",
+      startAt: "2026-06-23T23:10:00.000Z",
+      origin: "福岡",
+    },
+  }), false);
+  assert.equal(bookingHasRequiredFields({
+    type: "flight",
+    parsed: {
+      flightNumber: "JAL304",
+      startAt: "2026-06-23T23:10:00.000Z",
+      endAt: "2026-06-24T00:50:00.000Z",
+      origin: "福岡",
+      destination: "東京（羽田）",
+    },
+  }), true);
 });
 
 test("年末の年なし日付は翌年として補完する", () => {

@@ -184,7 +184,9 @@ export function validateScreenshotAnalysis(analysis) {
   if (!AI_CATEGORIES.includes(normalized.category)) errors.push("category is invalid");
   if (normalized.category === "flight") {
     const item = normalized.extracted.items[0] || {};
-    if (!item.startAt || !item.origin || !item.destination) errors.push("flight date and airports are required");
+    if (!item.flightNumber || !item.startAt || !item.endAt || !item.origin || !item.destination) {
+      errors.push("flight number, date, times and airports are required");
+    }
   }
   if (normalized.category === "hotel" && (!normalized.extracted.name || !normalized.extracted.checkIn)) {
     errors.push("hotel name and checkIn are required");
@@ -267,6 +269,15 @@ export function bookingDuplicateKey(booking = {}) {
     return ["hotel", name, checkIn, checkOut].join("|");
   }
   return "";
+}
+
+export function bookingHasRequiredFields(booking = {}) {
+  const data = { ...(booking.parsed || {}), ...(booking.overrides || {}), ...(booking.data || {}) };
+  if (booking.type === "flight") {
+    return Boolean(data.flightNumber && data.startAt && data.endAt && data.origin && data.destination);
+  }
+  if (booking.type === "hotel") return Boolean(data.name && data.checkIn);
+  return false;
 }
 
 export function makeFailedAnalysis(message, error, sourceHash = "") {
@@ -445,7 +456,11 @@ function screenshotExtracted(category, value, sourceKind, referenceDate = "") {
     const origin = String(input.departureAirport || input.origin || "");
     const destination = String(input.arrivalAirport || input.destination || "");
     const startAt = combineScreenshotDateTime(departureDate, departureTime, "", referenceDate);
-    const endAt = combineScreenshotDateTime(departureDate, arrivalTime, startAt, referenceDate);
+    const parsedEndAt = arrivalTime
+      ? combineScreenshotDateTime(departureDate, arrivalTime, startAt, referenceDate)
+      : "";
+    const durationMinutes = numberOrEmpty(input.durationMinutes);
+    const endAt = parsedEndAt || addMinutes(startAt, durationMinutes);
     const dedupeKey = [airline, flightNumber, departureDate, departureTime, origin, destination].join("|");
     return {
       provider: airline,
@@ -463,6 +478,7 @@ function screenshotExtracted(category, value, sourceKind, referenceDate = "") {
         bookingLink: "",
         status: normalizeBookingStatus(input.status),
         reservationNumber: String(input.reservationNumber || ""),
+        durationMinutes,
         dedupeKey,
       }],
     };
@@ -601,6 +617,14 @@ function dateParts(year, month, day) {
   const date = new Date(Date.UTC(year, month - 1, day));
   if (date.getUTCFullYear() !== year || date.getUTCMonth() !== month - 1 || date.getUTCDate() !== day) return "";
   return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+}
+
+function addMinutes(value, minutes) {
+  if (!value || !Number.isFinite(Number(minutes)) || Number(minutes) <= 0) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  date.setUTCMinutes(date.getUTCMinutes() + Number(minutes));
+  return date.toISOString();
 }
 
 function normalizeStatus(status, category, confidence, issues) {

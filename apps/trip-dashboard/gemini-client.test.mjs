@@ -118,3 +118,69 @@ test("Gemini画像解析はinline_dataでスクショを送る", async (context)
   assert.equal(result.analysis.sourceType, "screenshot");
   assert.equal(result.analysis.imageId, "image-12345678");
 });
+
+test("航空券の到着項目が空なら画像を1回だけ再解析する", async (context) => {
+  const originalFetch = globalThis.fetch;
+  context.after(() => { globalThis.fetch = originalFetch; });
+  let calls = 0;
+  globalThis.fetch = async (url, options) => {
+    calls += 1;
+    const request = JSON.parse(options.body);
+    const retry = calls === 2;
+    if (retry) assert.ok(request.contents[0].parts[0].text.includes("arrivalTime"));
+    const extracted = {
+      airline: "JAL",
+      flightNumber: "JAL304",
+      departureDate: "2026-06-24",
+      departureTime: "08:10",
+      arrivalTime: retry ? "09:50" : "",
+      departureAirport: "福岡",
+      arrivalAirport: retry ? "東京（羽田）" : "",
+      reservationNumber: "",
+      durationMinutes: 100,
+      hotelName: "",
+      checkInDate: "",
+      checkOutDate: "",
+      nights: 0,
+      address: "",
+      planName: "",
+      guestName: "",
+      checkInTime: "",
+      status: "confirmed",
+    };
+    return {
+      ok: true,
+      json: async () => ({
+        candidates: [{
+          content: {
+            parts: [{ text: JSON.stringify({
+              sourceKind: "flight_screenshot",
+              summary: "JAL304",
+              reservations: [{
+                category: "flight",
+                confidence: 0.9,
+                summary: "JAL304",
+                extracted,
+                warnings: retry ? [] : ["到着項目が読めません"],
+              }],
+              warnings: [],
+            }) }],
+          },
+        }],
+      }),
+    };
+  };
+
+  const result = await classifyTripScreenshotWithGemini({
+    apiKey: "AIzaSy-test",
+    image: { base64: "abc123", mimeType: "image/jpeg" },
+    sourceKind: "flight_screenshot",
+    imageHash: "fnv1a-retry001",
+    analyzedAt: "2026-06-18T00:00:00.000Z",
+  });
+
+  assert.equal(calls, 2);
+  assert.equal(result.analysis.reservations[0].extracted.arrivalTime, "09:50");
+  assert.equal(result.analysis.reservations[0].extracted.arrivalAirport, "東京（羽田）");
+  assert.deepEqual(result.analysis.reservations[0].warnings, []);
+});
