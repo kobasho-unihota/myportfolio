@@ -15,9 +15,11 @@
 }
 * { box-sizing: border-box; }
 [hidden] { display: none !important; }
-html { color-scheme: light; scroll-behavior: smooth; touch-action: manipulation; }
+html { height: 100%; overflow: hidden; color-scheme: light; scroll-behavior: smooth; touch-action: manipulation; }
 body {
   margin: 0;
+  height: 100%;
+  overflow: hidden;
   min-width: 320px;
   background: var(--bg);
   color: var(--text);
@@ -33,7 +35,11 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
   outline-offset: 2px;
 }
 svg { width: 21px; height: 21px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
-.app-shell { width: min(920px, 100%); margin: 0 auto; padding: 0 24px 110px; }
+.plane-icon { fill: currentColor; stroke: none; }
+.app-shell {
+  width: min(920px, 100%); height: 100vh; height: 100dvh; margin: 0 auto; padding: 0 24px 110px;
+  overflow-x: hidden; overflow-y: auto; overscroll-behavior-y: contain; -webkit-overflow-scrolling: touch;
+}
 .topbar {
   display: flex; align-items: center; justify-content: space-between;
   min-height: 76px; border-bottom: 1px solid rgba(190, 204, 216, .72);
@@ -97,16 +103,23 @@ h2 { margin-bottom: 0; font-size: 25px; }
 }
 .countdown strong { display: block; font-family: Georgia, serif; font-size: 25px; }
 .countdown span { font-size: 9px; color: rgba(255,255,255,.68); }
-.route {
-  position: relative; z-index: 1; display: grid; grid-template-columns: 1fr 60px 1fr;
-  align-items: center; gap: 10px; margin: 25px 0 17px;
+.journey-grid {
+  position: relative; z-index: 1; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px; margin: 24px 0 17px;
 }
-.route > div:last-child { text-align: right; }
-.route strong { display: block; font-size: 24px; letter-spacing: -.03em; }
-.route small { color: rgba(255,255,255,.6); font-size: 10px; }
-.route-line { display: flex; align-items: center; gap: 4px; color: #87c6ff; }
-.route-line::before, .route-line::after { content: ""; height: 1px; flex: 1; background: rgba(135,198,255,.45); }
-.route-line svg { width: 16px; transform: rotate(90deg); }
+.journey-leg { min-width: 0; padding: 14px; border: 1px solid rgba(255,255,255,.12); border-radius: 17px; background: rgba(255,255,255,.08); }
+.journey-leg.inbound { background: rgba(135,198,255,.1); }
+.leg-heading { display: flex; align-items: center; justify-content: space-between; color: #b9ddff; }
+.leg-heading span { font-size: 10px; font-weight: 900; letter-spacing: .12em; }
+.leg-heading svg { width: 22px; height: 22px; transform: rotate(45deg); }
+.journey-leg.inbound .leg-heading svg { transform: rotate(225deg); }
+.leg-route { display: flex; align-items: center; gap: 7px; margin-top: 15px; }
+.leg-route strong { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 18px; }
+.leg-route i { color: rgba(255,255,255,.42); font-style: normal; }
+.leg-time { display: flex; align-items: center; gap: 7px; margin-top: 7px; }
+.leg-time time { font-family: Georgia, serif; font-size: 16px; }
+.leg-time span { color: rgba(255,255,255,.35); }
+.journey-leg > small { display: block; margin-top: 9px; overflow: hidden; color: rgba(255,255,255,.58); font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
 .hotel-hero-details {
   position: relative; z-index: 1; display: grid; gap: 10px; margin: 25px 0 17px;
 }
@@ -136,6 +149,10 @@ h2 { margin-bottom: 0; font-size: 25px; }
 .item-copy strong { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
 .item-copy p { margin: 5px 0 0; color: var(--muted); font-size: 11px; }
 .item-copy small { display: block; margin-top: 5px; color: #98a4b0; font-size: 9px; }
+.direction-badge {
+  display: inline-block; margin-bottom: 5px; padding: 3px 7px; border-radius: 999px;
+  background: var(--sky); color: var(--blue); font-size: 8px; font-weight: 900;
+}
 .item-side { text-align: right; font-size: 11px; }
 .item-side strong { display: block; }
 .item-side span { display: block; margin-top: 4px; color: var(--muted); font-size: 9px; }
@@ -347,7 +364,7 @@ h2 { margin-bottom: 0; font-size: 25px; }
 .field input, .field select { width: 100%; min-height: 48px; padding: 0 12px; border: 1px solid var(--line); border-radius: 12px; background: #fff; color: var(--text); }
 .privacy-card { background: #eaf4ff; border-color: #d4e6f8; box-shadow: none; }
 .bottom-nav {
-  position: fixed; left: 50%; bottom: 0; z-index: 20; display: grid; grid-template-columns: repeat(4, 1fr);
+  position: fixed; left: 50%; bottom: 0; z-index: 100; display: grid; grid-template-columns: repeat(4, 1fr);
   width: min(920px, 100%); min-height: calc(72px + env(safe-area-inset-bottom));
   padding: 7px 12px env(safe-area-inset-bottom); border-top: 1px solid rgba(201,212,221,.86);
   background: rgba(255,255,255,.92); box-shadow: 0 -8px 30px rgba(16,42,67,.06);
@@ -394,8 +411,10 @@ h2 { margin-bottom: 0; font-size: 25px; }
   .trip-hero { padding: 23px 20px; border-radius: 24px; }
   .trip-top h2 { font-size: 25px; }
   .countdown { min-width: 58px; }
-  .route { grid-template-columns: 1fr 45px 1fr; }
-  .route strong { font-size: 18px; overflow-wrap: anywhere; }
+  .journey-grid { gap: 8px; }
+  .journey-leg { padding: 12px; }
+  .leg-route strong { font-size: 15px; }
+  .leg-time time { font-size: 14px; }
   .timeline-card { grid-template-columns: 43px minmax(0, 1fr) auto; gap: 11px; padding: 14px; }
   .item-icon { width: 42px; height: 42px; }
   .trip-list { grid-template-columns: 1fr; }

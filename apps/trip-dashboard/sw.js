@@ -1,9 +1,9 @@
-const CACHE_NAME = "tripboard-shell-v22";
+const CACHE_NAME = "tripboard-shell-v25";
 const APP_SHELL = [
   "./",
   "./index.html",
-  "./styles.css?v=20",
-  "./app.mjs?v=22",
+  "./styles.css?v=23",
+  "./app.mjs?v=25",
   "./ai-core.mjs?v=22",
   "./gemini-client.mjs?v=22",
   "./firebase-sync.mjs?v=20",

@@ -33,6 +33,11 @@ const elements = Object.fromEntries([...document.querySelectorAll("[id]")].map((
 
 if (demoMode && !state.bookings.length) {
   state.bookings = demoBookings();
+  state.trips = [{
+    id: "demo-trip",
+    bookingIds: state.bookings.map((booking) => booking.id),
+    title: "",
+  }];
 }
 
 bind("[data-view]", "click", (event, button) => showView(button.dataset.view));
@@ -70,6 +75,12 @@ cloudSync.subscribe(handleCloudSnapshot);
 render();
 
 async function handleCloudSnapshot(snapshot) {
+  if (demoMode) {
+    state.user = null;
+    state.syncStatus = "signed-out";
+    render();
+    return;
+  }
   state.user = snapshot.user;
   state.syncStatus = snapshot.status;
   if (snapshot.status === "synced") {
@@ -377,11 +388,11 @@ function blobToDataUrl(blob) {
 
 function renderTrips() {
   const trips = displayTrips().filter((trip) => Date.parse(trip.endAt) >= Date.now() - 12 * 3600000);
-  elements.nextTrip.innerHTML = trips[0] ? tripHero(trips[0]) : emptyState("次の出張はありません", "予約スクリーンショットをAI解析すると、予約がここに表示されます。", "スクショを解析する");
+  elements.nextTrip.innerHTML = trips[0] ? tripHero(trips[0]) : emptyState("今後の予定はありません", "予約スクリーンショットをAI解析すると、フライトやホテルがここに表示されます。", "スクショを解析する");
   elements.nextTrip.querySelector("[data-open-sync]")?.addEventListener("click", () => showView("sync"));
   elements.upcomingTrips.innerHTML = trips.slice(1, 5).length
     ? trips.slice(1, 5).map(tripMini).join("")
-    : `<div class="empty-state"><strong>その次の予定はありません</strong><p>保存した予約を手動で同じ出張にまとめられます。</p></div>`;
+    : `<div class="empty-state"><strong>ほかの予定はありません</strong><p>予約を追加すると、日付順にここへ表示されます。</p></div>`;
 }
 
 function displayTrips() {
@@ -405,7 +416,7 @@ function buildDisplayTrip(items, title = "", id = "") {
   const endAt = new Date(Math.max(...items.map(bookingEndMs))).toISOString();
   return {
     id,
-    title: title || inferTripTitle(items),
+    title: inferTripTitle(items),
     startAt,
     endAt,
     durationDays: Math.max(1, Math.ceil((bookingEndMs({ data: { checkIn: startAt, checkOut: endAt } }) - Date.parse(startAt)) / 86400000)),
@@ -415,10 +426,17 @@ function buildDisplayTrip(items, title = "", id = "") {
 }
 
 function inferTripTitle(items) {
-  const flight = items.find((item) => item.type === "flight" && item.data.destination);
+  const flights = items.filter((item) => item.type === "flight");
+  const outbound = findOutboundFlight(flights);
+  const inbound = findInboundFlight(flights);
   const hotel = items.find((item) => item.type === "hotel" && item.data.name);
-  const destination = flight?.data.destination || hotel?.data.name || "未分類の出張";
-  return `${shortAirport(destination)}出張`;
+  if (outbound?.data.origin && outbound?.data.destination) {
+    const separator = inbound && inbound.id !== outbound.id ? " ⇄ " : " → ";
+    return `${shortAirport(outbound.data.origin)}${separator}${shortAirport(outbound.data.destination)}`;
+  }
+  const flight = flights.find((item) => item.data.origin || item.data.destination);
+  if (flight) return [shortAirport(flight.data.origin), shortAirport(flight.data.destination)].filter(Boolean).join(" → ");
+  return hotel?.data.name || "予定";
 }
 
 function inferDestination(items) {
@@ -428,19 +446,19 @@ function inferDestination(items) {
 }
 
 function tripHero(trip) {
-  const flight = trip.items.find((item) => item.type === "flight");
+  const flights = trip.items.filter((item) => item.type === "flight");
+  const outbound = findOutboundFlight(flights);
+  const inbound = findInboundFlight(flights);
   const hotel = trip.items.find((item) => item.type === "hotel");
-  const data = flight?.data || {};
   const hotelData = hotel?.data || {};
   const days = Math.ceil((Date.parse(trip.startAt) - Date.now()) / 86400000);
-  const countdown = days > 0 ? `<strong>${days}</strong><span>日後</span>` : `<strong>${days === 0 ? "今日" : "出張中"}</strong><span>TRIP</span>`;
+  const countdown = days > 0 ? `<strong>${days}</strong><span>日後</span>` : `<strong>${days === 0 ? "今日" : "進行中"}</strong><span>SCHEDULE</span>`;
   const warnings = bookingWarnings(trip);
-  const mainContent = flight ? `
-      <div class="route">
-        <div><strong>${escapeHtml(shortAirport(data.origin || state.settings.homeAirport))}</strong><small>${formatTime(data.startAt)}</small></div>
-        <div class="route-line"><svg viewBox="0 0 24 24"><path d="M3 15.5 21 8l-7.5 13-2-7-8.5 1.5Z"/></svg></div>
-        <div><strong>${escapeHtml(shortAirport(data.destination || trip.destination))}</strong><small>${formatTime(data.endAt)}</small></div>
-      </div>`
+  const legs = [
+    outbound ? journeyLeg(outbound, "行き", "outbound") : "",
+    inbound && inbound.id !== outbound?.id ? journeyLeg(inbound, "帰り", "inbound") : "",
+  ].filter(Boolean).join("");
+  const mainContent = flights.length ? `<div class="journey-grid">${legs}</div>`
     : `
       <div class="hotel-hero-details">
         <div><small>HOTEL</small><strong>${escapeHtml(hotelData.name || "ホテル")}</strong></div>
@@ -449,21 +467,70 @@ function tripHero(trip) {
       </div>`;
   return `
     <article class="trip-hero">
-      <div class="trip-top"><div><small>${formatDateRange(trip.startAt, trip.endAt)}</small><h2>${escapeHtml(trip.title)}</h2></div><div class="countdown">${countdown}</div></div>
+      <div class="trip-top"><div><small>NEXT SCHEDULE ・ ${formatDateRange(trip.startAt, trip.endAt)}</small><h2>${escapeHtml(inferTripTitle(trip.items))}</h2></div><div class="countdown">${countdown}</div></div>
       ${mainContent}
-      <div class="trip-meta"><span>${trip.durationDays}日間</span><span>${trip.items.length}件の予約</span>${trip.id ? "<span>手動まとめ</span>" : ""}</div>
+      <div class="trip-meta"><span>${trip.durationDays}日間</span><span>${trip.items.length}件の予約</span>${hotel ? `<span>${escapeHtml(hotelData.name || "ホテル")}</span>` : ""}</div>
     </article>
-    <div class="timeline">${trip.items.map(timelineItem).join("")}</div>
+    <div class="timeline">${trip.items.map((item) => timelineItem(item, flightDirection(item, flights))).join("")}</div>
     ${warnings.length ? `<div class="warning-box"><strong>確認してください</strong><ul>${warnings.map((warning) => `<li>${escapeHtml(warning)}</li>`).join("")}</ul></div>` : ""}
   `;
 }
 
-function timelineItem(booking) {
+function journeyLeg(booking, label, direction) {
+  const data = booking.data;
+  return `<section class="journey-leg ${direction}">
+    <div class="leg-heading"><span>${label}</span>${flightIcon()}</div>
+    <div class="leg-route"><strong>${escapeHtml(shortAirport(data.origin))}</strong><i>→</i><strong>${escapeHtml(shortAirport(data.destination))}</strong></div>
+    <div class="leg-time"><time>${formatTime(data.startAt)}</time><span>—</span><time>${formatTime(data.endAt)}</time></div>
+    <small>${escapeHtml(data.flightNumber || "航空券")} ・ ${dateOnlySafe(data.startAt)}</small>
+  </section>`;
+}
+
+function findOutboundFlight(flights) {
+  return flights.find((flight) => airportMatchesHome(flight.data.origin))
+    || flights.find((flight) => !airportMatchesHome(flight.data.destination))
+    || flights[0];
+}
+
+function findInboundFlight(flights) {
+  return flights.find((flight) => airportMatchesHome(flight.data.destination))
+    || (flights.length > 1 ? flights[flights.length - 1] : null);
+}
+
+function airportMatchesHome(value = "") {
+  const airport = normalizeAirportName(value);
+  const home = normalizeAirportName(state.settings.homeAirport);
+  return Boolean(airport && home && (airport.includes(home) || home.includes(airport)));
+}
+
+function normalizeAirportName(value = "") {
+  const compact = shortAirport(value).replace(/\s/g, "");
+  const aliases = {
+    FUK: "福岡",
+    HND: "羽田",
+    NRT: "成田",
+    CTS: "新千歳",
+    ITM: "伊丹",
+    KIX: "関西",
+    NGO: "中部",
+    OKA: "那覇",
+  };
+  return aliases[compact.toUpperCase()] || compact.replace(/東京|羽田/g, "羽田").replace(/札幌|新千歳/g, "新千歳");
+}
+
+function flightDirection(booking, flights) {
+  if (booking.type !== "flight") return "";
+  if (booking.id === findOutboundFlight(flights)?.id) return "行き";
+  if (booking.id === findInboundFlight(flights)?.id) return "帰り";
+  return "乗継";
+}
+
+function timelineItem(booking, direction = "") {
   const data = booking.data;
   if (booking.type === "flight") {
     return `<article class="timeline-card">
       <div class="item-icon">${flightIcon()}</div>
-      <div class="item-copy"><strong>${escapeHtml(data.flightNumber || "航空券")} ${escapeHtml(shortAirport(data.origin))} → ${escapeHtml(shortAirport(data.destination))}</strong><p>${dateTimeSafe(data.startAt)}発</p><small>予約 ${escapeHtml(data.reservationNumber || "未取得")} ・ 座席 ${escapeHtml(data.seat || "未指定")}</small></div>
+      <div class="item-copy">${direction ? `<span class="direction-badge">${direction}</span>` : ""}<strong>${escapeHtml(data.flightNumber || "航空券")} ${escapeHtml(shortAirport(data.origin))} → ${escapeHtml(shortAirport(data.destination))}</strong><p>${dateTimeSafe(data.startAt)}発</p><small>予約 ${escapeHtml(data.reservationNumber || "未取得")} ・ 座席 ${escapeHtml(data.seat || "未指定")}</small></div>
       <div class="item-side"><strong>${formatTime(data.startAt)}</strong><span>${formatTime(data.endAt)}着</span></div>
     </article>`;
   }
@@ -475,7 +542,7 @@ function timelineItem(booking) {
 }
 
 function tripMini(trip) {
-  return `<article class="trip-mini"><time>${formatDateRange(trip.startAt, trip.endAt)}</time><h3>${escapeHtml(trip.title)}</h3><p>${trip.items.map((item) => item.type === "flight" ? item.data.flightNumber : item.data.name).filter(Boolean).join(" / ")}</p></article>`;
+  return `<article class="trip-mini"><time>${formatDateRange(trip.startAt, trip.endAt)}</time><h3>${escapeHtml(inferTripTitle(trip.items))}</h3><p>${trip.items.map((item) => item.type === "flight" ? item.data.flightNumber : item.data.name).filter(Boolean).join(" / ")}</p></article>`;
 }
 
 function renderBookings() {
@@ -900,7 +967,7 @@ function showToast(message) {
 }
 function escapeHtml(value = "") { return String(value).replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[char])); }
 function escapeAttribute(value = "") { return escapeHtml(value); }
-function flightIcon() { return `<svg viewBox="0 0 24 24"><path d="M3 15.5 21 8l-7.5 13-2-7-8.5 1.5Z"/><path d="m11.5 14 4-4"/></svg>`; }
+function flightIcon() { return `<svg class="plane-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M10.18 9 2 3.5V2l10 3 10-3v1.5L13.82 9 22 14.5V16l-10-3-10 3v-1.5L10.18 9Z"/></svg>`; }
 function hotelIcon() { return `<svg viewBox="0 0 24 24"><path d="M4 20V5h11v15M15 10h5v10M8 9h3M8 13h3M8 17h3M2 20h20"/></svg>`; }
 function editIcon() { return `<svg viewBox="0 0 24 24"><path d="m14 5 5 5L8 21H3v-5Z"/><path d="m12 7 5 5"/></svg>`; }
 function refreshIcon() { return `<svg viewBox="0 0 24 24"><path d="M20 7v5h-5M4 17v-5h5"/><path d="M6.1 9a7 7 0 0 1 11.6-2L20 9M4 15l2.3 2a7 7 0 0 0 11.6-2"/></svg>`; }
