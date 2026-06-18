@@ -49,10 +49,10 @@ bind("[data-filter]", "click", (event, button) => {
 bind("[data-close]", "click", () => elements.bookingDialog.close());
 
 listen(elements.heroSyncButton, "click", () => showView("sync"));
+listen(elements.settingsButton, "click", () => showView("settings"));
 listen(elements.screenshotInput, "change", handleScreenshotSelection);
 listen(elements.analyzeScreenshotsButton, "click", analyzeSelectedScreenshots);
 listen(elements.clearScreenshotsButton, "click", clearScreenshotSelection);
-listen(elements.accountButton, "click", handleAccount);
 listen(elements.accountSettingsButton, "click", handleAccount);
 listen(elements.addBookingButton, "click", () => openBookingDialog());
 listen(elements.bookingType, "change", updateBookingFields);
@@ -278,7 +278,10 @@ function setAnalyzing(active, label = "処理中", detail = "") {
 function showView(name) {
   document.querySelectorAll(".view").forEach((view) => view.classList.toggle("active", view.id === `${name}View`));
   document.querySelectorAll(".bottom-nav [data-view]").forEach((button) => button.classList.toggle("active", button.dataset.view === name));
-  window.scrollTo({ top: 0, behavior: "smooth" });
+  elements.settingsButton?.classList.toggle("active", name === "settings");
+  document.body.classList.toggle("settings-open", name === "settings");
+  document.querySelector(".app-shell")?.scrollTo({ top: 0, behavior: "smooth" });
+  history.replaceState(null, "", `#${name}`);
 }
 
 function render() {
@@ -290,6 +293,7 @@ function render() {
   renderLocalState();
   renderScreenshotItems();
   renderTrips();
+  renderTripHistory();
   renderBookings();
   renderReviewItems();
   renderTripCandidates();
@@ -298,13 +302,14 @@ function render() {
 function renderLocalState() {
   const failed = state.aiAnalyses.filter((analysis) => analysis.status === "failed").length;
   const signedIn = Boolean(state.user);
-  elements.accountLabel.textContent = signedIn ? state.user.displayName || state.user.email : "Googleで同期";
+  elements.headerStatus.textContent = signedIn
+    ? state.syncStatus === "synced" ? "同期済み" : "同期しています"
+    : "この端末の予約";
   elements.accountSettingsTitle.textContent = signedIn ? state.user.email : "Googleアカウント";
   elements.accountSettingsCopy.textContent = signedIn
     ? "予約、AI解析結果、出張まとめ、設定をFirebaseで同期しています。"
     : "ログインすると、この端末の既存予約をFirebaseへ自動移行し、iPhoneとPCで同期できます。";
   elements.accountSettingsButton.textContent = signedIn ? "ログアウト" : "Googleでログイン";
-  elements.syncDot.className = `sync-dot ${state.syncStatus === "synced" ? "synced" : state.syncStatus === "error" ? "error" : state.syncStatus === "syncing" || state.syncStatus === "loading" ? "syncing" : ""}`;
   elements.connectionBanner.hidden = navigator.onLine && state.syncStatus !== "error";
   elements.connectionBanner.classList.toggle("error", state.syncStatus === "error");
   elements.connectionMessage.textContent = state.syncStatus === "error"
@@ -388,11 +393,72 @@ function blobToDataUrl(blob) {
 
 function renderTrips() {
   const trips = displayTrips().filter((trip) => Date.parse(trip.endAt) >= Date.now() - 12 * 3600000);
-  elements.nextTrip.innerHTML = trips[0] ? tripHero(trips[0]) : emptyState("今後の予定はありません", "予約スクリーンショットをAI解析すると、フライトやホテルがここに表示されます。", "スクショを解析する");
+  elements.nextTrip.innerHTML = trips[0] ? dashboardCard(trips[0]) : emptyState("今後の予定はありません", "予約スクリーンショットを取り込むと、次の移動がここに表示されます。", "予約を取り込む");
   elements.nextTrip.querySelector("[data-open-sync]")?.addEventListener("click", () => showView("sync"));
-  elements.upcomingTrips.innerHTML = trips.slice(1, 5).length
-    ? trips.slice(1, 5).map(tripMini).join("")
-    : `<div class="empty-state"><strong>ほかの予定はありません</strong><p>予約を追加すると、日付順にここへ表示されます。</p></div>`;
+  elements.upcomingTrips.innerHTML = trips.slice(1, 4).length
+    ? trips.slice(1, 4).map(tripMini).join("")
+    : `<div class="empty-state compact-empty"><strong>ほかの予定はありません</strong><p>新しい予約を取り込むとここへ追加されます。</p></div>`;
+}
+
+function dashboardCard(trip) {
+  const flights = trip.items.filter((item) => item.type === "flight");
+  const outbound = findOutboundFlight(flights);
+  const inbound = findInboundFlight(flights);
+  const hotel = trip.items.find((item) => item.type === "hotel");
+  const nextItem = trip.items.find((item) => bookingEndMs(item) >= Date.now()) || trip.items[0];
+  const nextAt = nextItem?.data.startAt || nextItem?.data.checkIn || trip.startAt;
+  const days = Math.ceil((Date.parse(nextAt) - Date.now()) / 86400000);
+  const countdown = days > 0 ? `あと${days}日` : days === 0 ? "今日" : "進行中";
+  const reviewCount = bookingWarnings(trip).length;
+  const confirmed = trip.items.filter((item) => item.status !== "cancelled").length;
+  const latestBookingUpdate = Math.max(...trip.items.map((item) => Date.parse(item.updatedAt || 0)).filter(Number.isFinite), 0);
+  const updatedAt = state.settings.lastAnalyzedAt || (latestBookingUpdate ? new Date(latestBookingUpdate).toISOString() : "");
+  const updated = updatedAt ? relativeUpdatedAt(updatedAt) : "未更新";
+  return `<article class="dashboard-card">
+    <header class="dashboard-head">
+      <div><span>次の移動</span><strong>${dateTimeSafe(nextAt)}</strong></div>
+      <b>${countdown}</b>
+    </header>
+    ${outbound ? primaryFlight(outbound) : hotel ? primaryHotel(hotel) : ""}
+    <div class="dashboard-details">
+      ${inbound && inbound.id !== outbound?.id ? dashboardRow("帰り", `${shortAirport(inbound.data.origin)} → ${shortAirport(inbound.data.destination)}`, `${dateTimeSafe(inbound.data.startAt)}・${inbound.data.flightNumber || "航空券"}`, flightIcon()) : ""}
+      ${hotel ? dashboardRow("ホテル", hotel.data.name || "ホテル", `${dateOnlySafe(hotel.data.checkIn)} チェックイン`, hotelIcon()) : ""}
+    </div>
+    <footer class="dashboard-status">
+      <span class="${reviewCount ? "needs-review" : "confirmed"}"><i></i>${reviewCount ? `${reviewCount}件を要確認` : `予約${confirmed}件すべて確認済み`}</span>
+      <small>最終更新 ${updated}</small>
+    </footer>
+  </article>`;
+}
+
+function primaryFlight(flight) {
+  const data = flight.data;
+  return `<section class="primary-flight">
+    <div class="flight-date">${dateOnlySafe(data.startAt)}<span>${escapeHtml(data.flightNumber || "航空券")}${data.seat ? `・座席 ${escapeHtml(data.seat)}` : ""}</span></div>
+    <div class="airport-route">
+      <div><strong>${escapeHtml(shortAirport(data.origin))}</strong><time>${formatTime(data.startAt)}</time></div>
+      <div class="flight-path"><span></span>${flightIcon()}<span></span></div>
+      <div><strong>${escapeHtml(shortAirport(data.destination))}</strong><time>${formatTime(data.endAt)}</time></div>
+    </div>
+  </section>`;
+}
+
+function primaryHotel(hotel) {
+  const data = hotel.data;
+  return `<section class="primary-hotel">${hotelIcon()}<div><span>次の宿泊</span><strong>${escapeHtml(data.name || "ホテル")}</strong><small>${dateTimeSafe(data.checkIn)}</small></div></section>`;
+}
+
+function dashboardRow(label, title, detail, icon) {
+  return `<div class="dashboard-row"><span class="row-icon">${icon}</span><div><small>${label}</small><strong>${escapeHtml(title)}</strong><p>${escapeHtml(detail)}</p></div></div>`;
+}
+
+function relativeUpdatedAt(value) {
+  const elapsed = Date.now() - Date.parse(value);
+  if (!Number.isFinite(elapsed)) return "日時不明";
+  if (elapsed < 60000) return "たった今";
+  if (elapsed < 3600000) return `${Math.floor(elapsed / 60000)}分前`;
+  if (elapsed < 86400000) return `${Math.floor(elapsed / 3600000)}時間前`;
+  return dateTimeSafe(value);
 }
 
 function displayTrips() {
@@ -542,7 +608,48 @@ function timelineItem(booking, direction = "") {
 }
 
 function tripMini(trip) {
-  return `<article class="trip-mini"><time>${formatDateRange(trip.startAt, trip.endAt)}</time><h3>${escapeHtml(inferTripTitle(trip.items))}</h3><p>${trip.items.map((item) => item.type === "flight" ? item.data.flightNumber : item.data.name).filter(Boolean).join(" / ")}</p></article>`;
+  const flights = trip.items.filter((item) => item.type === "flight").length;
+  const hotels = trip.items.filter((item) => item.type === "hotel").length;
+  return `<article class="trip-mini">
+    <div><time>${dateOnlySafe(trip.startAt)}</time><h3>${escapeHtml(inferTripTitle(trip.items))}</h3></div>
+    <p>${[flights ? `フライト${flights}件` : "", hotels ? `ホテル${hotels}件` : ""].filter(Boolean).join("・")}</p>
+  </article>`;
+}
+
+function renderTripHistory() {
+  if (!elements.tripHistory) return;
+  const trips = displayTrips().sort((a, b) => Date.parse(b.startAt) - Date.parse(a.startAt));
+  if (!trips.length) {
+    elements.tripHistory.innerHTML = `<div class="empty-state"><strong>履歴はまだありません</strong><p>予約を取り込むと、出張単位で時系列に整理されます。</p></div>`;
+    return;
+  }
+  const groups = new Map();
+  trips.forEach((trip) => {
+    const date = new Date(trip.startAt);
+    const key = `${date.getFullYear()}年${date.getMonth() + 1}月`;
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(trip);
+  });
+  elements.tripHistory.innerHTML = [...groups.entries()].map(([month, monthTrips]) => `
+    <section class="history-group">
+      <h2>${month}</h2>
+      <div>${monthTrips.map(historyCard).join("")}</div>
+    </section>`).join("");
+}
+
+function historyCard(trip) {
+  const now = Date.now();
+  const status = Date.parse(trip.endAt) < now ? "完了" : Date.parse(trip.startAt) <= now ? "進行中" : "予定";
+  const flights = trip.items.filter((item) => item.type === "flight");
+  const hotel = trip.items.find((item) => item.type === "hotel");
+  return `<article class="history-card">
+    <div class="history-date"><strong>${new Date(trip.startAt).getDate()}</strong><span>${new Intl.DateTimeFormat("ja-JP", { weekday: "short" }).format(new Date(trip.startAt))}</span></div>
+    <div class="history-copy">
+      <div><strong>${escapeHtml(inferTripTitle(trip.items))}</strong><span class="history-status ${status === "進行中" ? "current" : ""}">${status}</span></div>
+      <p>${formatDateRange(trip.startAt, trip.endAt)}</p>
+      <small>${[flights.length ? `フライト ${flights.length}` : "", hotel?.data.name || ""].filter(Boolean).join(" ・ ")}</small>
+    </div>
+  </article>`;
 }
 
 function renderBookings() {
