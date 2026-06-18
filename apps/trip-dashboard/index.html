@@ -14,7 +14,7 @@
   <link rel="manifest" href="./site.webmanifest?v=31">
   <link rel="icon" href="./icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="./apple-touch-icon.png">
-  <link rel="stylesheet" href="./styles.css?v=30">
+  <link rel="stylesheet" href="./styles.css?v=37">
 </head>
 <body>
   <div class="app-shell">
@@ -114,6 +114,14 @@
           <div><span id="syncProgressBar"></span></div>
           <small id="syncProgressText"></small>
         </div>
+        <section class="draft-review" id="draftReview" hidden>
+          <div class="draft-review-heading">
+            <div><p class="eyebrow">REVIEW BEFORE SAVE</p><h2>出張候補を確認</h2></div>
+            <span id="draftReviewCount"></span>
+          </div>
+          <p>AIの解析結果はまだ登録されていません。出張名と内容を確認し、不要な予約を外してから登録してください。</p>
+          <div class="draft-list" id="draftList"></div>
+        </section>
         <small class="last-sync" id="lastSyncLabel">まだ解析されていません</small>
         <section class="inbox-review">
           <div class="section-heading"><div><p class="eyebrow">INBOX</p><h2>確認が必要</h2></div></div>
@@ -197,6 +205,6 @@
   </dialog>
 
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
-  <script type="module" src="./app.mjs?v=30"></script>
+  <script type="module" src="./app.mjs?v=38"></script>
 </body>
 </html>

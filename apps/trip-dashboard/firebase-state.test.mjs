@@ -22,4 +22,6 @@ test("Firestore保存前にundefinedを除去して既定値を補う", () => {
   assert.equal(state.settings.homeAirport, "福岡");
   assert.deepEqual(state.aiAnalyses, []);
   assert.deepEqual(state.trips, []);
+  assert.deepEqual(state.importSessions, []);
+  assert.deepEqual(state.tripDrafts, []);
 });

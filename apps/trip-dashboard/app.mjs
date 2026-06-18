@@ -1,7 +1,5 @@
 import {
-  analysesToBookings,
   analysisNeedsReview,
-  bookingHasRequiredFields,
   excludeImportedBookings,
   hashBytes,
   makeFailedScreenshotAnalysis,
@@ -11,9 +9,10 @@ import {
 } from "./ai-core.mjs?v=22";
 import { bookingWarnings, effectiveBooking, mergeBookings } from "./core.mjs?v=14";
 import { classifyTripScreenshotWithGemini, clearGeminiApiKey, getGeminiApiKey, saveGeminiApiKey } from "./gemini-client.mjs?v=22";
-import { cloudSync } from "./firebase-sync.mjs?v=20";
-import { hasMigrationData, isEmptyCloudState } from "./firebase-state.mjs?v=20";
-import { clearMigratedTripBoardData, loadTripBoardState } from "./local-store.mjs?v=20";
+import { cloudSync } from "./firebase-sync.mjs?v=32";
+import { hasMigrationData, isEmptyCloudState } from "./firebase-state.mjs?v=32";
+import { clearMigratedTripBoardData, loadTripBoardState } from "./local-store.mjs?v=32";
+import { approveTripDraft, createImportSession, draftWarnings, groupCandidateBookings, recalculateTripDraft } from "./trip-drafts.mjs?v=37";
 
 const localMigrationState = loadTripBoardState();
 const state = {
@@ -25,6 +24,8 @@ const state = {
   isAnalyzing: false,
   selectedTripKey: "",
   previousView: "home",
+  importSessions: localMigrationState.importSessions || [],
+  tripDrafts: localMigrationState.tripDrafts || [],
 };
 let migrationAttempted = false;
 let saveQueue = Promise.resolve();
@@ -40,6 +41,16 @@ if (demoMode && !state.bookings.length) {
     bookingIds: state.bookings.map((booking) => booking.id),
     title: "",
   }];
+  if (new URLSearchParams(location.search).has("draft-review")) {
+    state.tripDrafts = groupCandidateBookings(state.bookings, {
+      homeAirport: state.settings.homeAirport,
+      importSessionId: "demo-import",
+      now: new Date().toISOString(),
+    });
+    state.importSessions = [{ id: "demo-import", status: "reviewing", imageIds: ["demo-flight", "demo-hotel"], createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() }];
+    state.bookings = [];
+    state.trips = [];
+  }
 }
 
 bind("[data-view]", "click", (event, button) => showView(button.dataset.view));
@@ -71,6 +82,9 @@ listen(elements.reviewList, "click", handleReviewAction);
 listen(elements.inboxReviewList, "click", handleReviewAction);
 listen(elements.tripCandidateList, "click", handleTripAction);
 listen(elements.screenshotList, "change", handleScreenshotKindChange);
+listen(elements.draftList, "click", handleDraftAction);
+listen(elements.draftList, "change", handleDraftChange);
+listen(elements.draftList, "input", handleDraftChange);
 listen(elements.nextTrip, "click", handleTripOpen);
 listen(elements.upcomingTrips, "click", handleTripOpen);
 listen(elements.tripHistory, "click", handleTripOpen);
@@ -113,6 +127,8 @@ async function handleCloudSnapshot(snapshot) {
     state.bookings = snapshot.state.bookings || [];
     state.aiAnalyses = snapshot.state.aiAnalyses || [];
     state.trips = snapshot.state.trips || [];
+    state.importSessions = snapshot.state.importSessions || [];
+    state.tripDrafts = snapshot.state.tripDrafts || [];
     state.settings = { homeAirport: "福岡", lastAnalyzedAt: "", ...(snapshot.state.settings || {}) };
   }
   if (snapshot.status === "signed-out") {
@@ -120,6 +136,8 @@ async function handleCloudSnapshot(snapshot) {
     state.bookings = local.bookings;
     state.aiAnalyses = local.aiAnalyses;
     state.trips = local.trips;
+    state.importSessions = local.importSessions || [];
+    state.tripDrafts = local.tripDrafts || [];
     state.settings = local.settings;
   }
   if (snapshot.status === "error") showToast(readableError(snapshot.error));
@@ -221,45 +239,21 @@ async function analyzeSelectedScreenshots() {
         item.summary = failed.errorMessage;
       }
     }
-    const reflected = reflectScreenshotAnalyses(completed);
+    const { session, drafts } = createImportSession({
+      images: targets,
+      analyses: completed.filter((analysis) => ["flight", "hotel"].includes(analysis.category)),
+      homeAirport: state.settings.homeAirport,
+      now: new Date().toISOString(),
+    });
+    state.importSessions = [session, ...state.importSessions.filter((item) => item.id !== session.id)];
+    state.tripDrafts = [...drafts, ...state.tripDrafts.filter((draft) => draft.importSessionId !== session.id && draft.status === "pending")];
     state.settings.lastAnalyzedAt = new Date().toISOString();
     persist();
     render();
-    showToast(`新規${reflected.added}件を反映、取り込み済み${reflected.skipped}件を除外しました`);
+    showToast(`${drafts.length}件の出張候補を作成しました。内容を確認してください`);
   } finally {
     setAnalyzing(false);
   }
-}
-
-function reflectApprovedAnalyses(analyses) {
-  const nextBookings = analysesToBookings(analyses.filter((analysis) =>
-    ["flight", "hotel"].includes(analysis.category) && (!analysisNeedsReview(analysis) || analysis.status === "approved")));
-  if (!nextBookings.length) return false;
-  state.bookings = mergeBookings(state.bookings, nextBookings).map((booking) => {
-    const current = state.bookings.find((item) => item.id === booking.id);
-    return { ...booking, tripId: current?.tripId || booking.tripId || "" };
-  });
-  return true;
-}
-
-function reflectScreenshotAnalyses(analyses) {
-  const analyzedImageIds = new Set(analyses.map((analysis) => analysis.imageId).filter(Boolean));
-  state.bookings = state.bookings.filter((booking) => {
-    if (!analyzedImageIds.has(booking.screenshot?.imageId)) return true;
-    return bookingHasRequiredFields(booking);
-  });
-  const candidates = analysesToBookings(analyses.filter((analysis) => ["flight", "hotel"].includes(analysis.category)));
-  const { bookings: nextBookings, skipped } = excludeImportedBookings(state.bookings, candidates);
-  const skippedAnalysisIds = new Set(skipped.map((booking) => booking.ai?.messageId).filter(Boolean));
-  if (skippedAnalysisIds.size) {
-    state.aiAnalyses = state.aiAnalyses.filter((analysis) => !skippedAnalysisIds.has(analysis.messageId));
-  }
-  if (!nextBookings.length) return { added: 0, skipped: skipped.length };
-  state.bookings = mergeBookings(state.bookings, nextBookings).map((booking) => {
-    const current = state.bookings.find((item) => item.id === booking.id);
-    return { ...booking, tripId: current?.tripId || booking.tripId || "" };
-  });
-  return { added: nextBookings.length, skipped: skipped.length };
 }
 
 function upsertAnalysis(analysis) {
@@ -311,6 +305,7 @@ function render() {
   renderTrips();
   renderTripHistory();
   renderTripDetail();
+  renderTripDrafts();
   renderBookings();
   renderReviewItems();
   renderTripCandidates();
@@ -332,7 +327,8 @@ function renderLocalState() {
   elements.connectionMessage.textContent = state.syncStatus === "error"
     ? "Firebaseとの同期に失敗しました。通信環境またはアクセス権限を確認してください。"
     : "オフラインです。Firestoreの端末キャッシュから表示しています。";
-  elements.screenshotSummary.textContent = `保存済み: 予約${state.bookings.length}件 / AI結果${state.aiAnalyses.length}件 / 失敗${failed}件`;
+  const pendingDrafts = state.tripDrafts.filter((draft) => draft.status === "pending").length;
+  elements.screenshotSummary.textContent = `出張${state.trips.length}件 / 確認待ち${pendingDrafts}件 / 解析失敗${failed}件`;
 }
 
 function renderScreenshotItems() {
@@ -342,6 +338,117 @@ function renderScreenshotItems() {
   elements.screenshotList.innerHTML = state.screenshotItems.length
     ? state.screenshotItems.map(screenshotCard).join("")
     : `<div class="empty-state"><strong>スクリーンショット未選択</strong><p>JAL予約一覧または楽天トラベル予約詳細のスクショを複数選択できます。</p></div>`;
+}
+
+function renderTripDrafts() {
+  const drafts = state.tripDrafts.filter((draft) => draft.status === "pending");
+  elements.draftReview.hidden = !drafts.length;
+  elements.draftReviewCount.textContent = drafts.length ? `${drafts.length}件` : "";
+  elements.draftList.innerHTML = drafts.map(tripDraftCard).join("");
+}
+
+function tripDraftCard(draft) {
+  const warnings = draftWarnings(draft);
+  return `<article class="draft-card" data-draft-id="${escapeAttribute(draft.id)}">
+    <header>
+      <label><span>出張名</span><input data-draft-field="title" value="${escapeAttribute(draft.title)}"></label>
+      <span class="draft-confidence">${Math.round((draft.confidence || 0) * 100)}%</span>
+    </header>
+    <div class="draft-dates">${formatDateRange(draft.startAt, draft.endAt)}</div>
+    <div class="draft-items">${draft.items.map((item) => draftItemRow(draft, item)).join("")}</div>
+    ${warnings.length ? `<div class="draft-warning"><strong>確認してください</strong><ul>${warnings.map((warning) => `<li>${escapeHtml(warning)}</li>`).join("")}</ul></div>` : ""}
+    <label class="draft-notes"><span>メモ</span><textarea data-draft-field="notes" placeholder="訪問先、会議、持ち物など">${escapeHtml(draft.notes || "")}</textarea></label>
+    <div class="draft-actions">
+      <button class="secondary-button" data-draft-action="discard" type="button">候補を破棄</button>
+      <button class="primary-button" data-draft-action="approve" type="button">この出張を登録</button>
+    </div>
+  </article>`;
+}
+
+function draftItemRow(draft, item) {
+  const data = { ...(item.booking.parsed || {}), ...(item.booking.overrides || {}) };
+  const label = item.role === "outbound" ? "往路" : item.role === "inbound" ? "復路" : item.role === "stay" ? "ホテル" : "その他";
+  const title = item.booking.type === "flight"
+    ? `${data.flightNumber || "航空券"} ${shortAirport(data.origin)} → ${shortAirport(data.destination)}`
+    : data.name || "ホテル";
+  const detail = item.booking.type === "flight" ? dateTimeSafe(data.startAt) : `${dateOnlySafe(data.checkIn)} - ${dateOnlySafe(data.checkOut)}`;
+  return `<label class="draft-item">
+    <input type="checkbox" data-draft-item="${escapeAttribute(item.id)}" ${item.included !== false ? "checked" : ""}>
+    <span class="draft-item-icon">${item.booking.type === "flight" ? flightIcon() : hotelIcon()}</span>
+    <span><select data-draft-role="${escapeAttribute(item.id)}" aria-label="${escapeAttribute(title)}の役割">
+      ${["outbound", "inbound", "stay", "other"].map((role) => `<option value="${role}" ${item.role === role ? "selected" : ""}>${role === "outbound" ? "往路" : role === "inbound" ? "復路" : role === "stay" ? "ホテル" : "その他"}</option>`).join("")}
+    </select><strong>${escapeHtml(title)}</strong><small>${escapeHtml(detail)}</small></span>
+  </label>`;
+}
+
+function handleDraftChange(event) {
+  let structureChanged = false;
+  const card = event.target.closest("[data-draft-id]");
+  const draft = state.tripDrafts.find((item) => item.id === card?.dataset.draftId);
+  if (!draft) return;
+  if (event.target.matches("[data-draft-field]")) {
+    draft[event.target.dataset.draftField] = event.target.value;
+  }
+  if (event.target.matches("[data-draft-item]")) {
+    const item = draft.items.find((entry) => entry.id === event.target.dataset.draftItem);
+    if (item) item.included = event.target.checked;
+    structureChanged = true;
+  }
+  if (event.target.matches("[data-draft-role]")) {
+    const item = draft.items.find((entry) => entry.id === event.target.dataset.draftRole);
+    if (item) item.role = event.target.value;
+    structureChanged = true;
+  }
+  recalculateTripDraft(draft);
+  persist();
+  if (structureChanged) renderTripDrafts();
+}
+
+function handleDraftAction(event) {
+  const button = event.target.closest("[data-draft-action]");
+  const card = button?.closest("[data-draft-id]");
+  const draft = state.tripDrafts.find((item) => item.id === card?.dataset.draftId);
+  if (!button || !draft) return;
+  if (button.dataset.draftAction === "discard") {
+    draft.status = "rejected";
+    draft.updatedAt = new Date().toISOString();
+    persist();
+    renderTripDrafts();
+    showToast("出張候補を破棄しました");
+    return;
+  }
+  if (!requireUser()) return;
+  try {
+    const includedItemIds = draft.items.filter((item) => item.included !== false).map((item) => item.id);
+    const { trip, bookings } = approveTripDraft(draft, {
+      title: draft.title,
+      notes: draft.notes,
+      includedItemIds,
+      now: new Date().toISOString(),
+    });
+    const { bookings: uniqueBookings } = excludeImportedBookings(state.bookings, bookings);
+    if (!uniqueBookings.length) throw new Error("選択した予約はすでに登録されています。");
+    const acceptedIds = new Set(uniqueBookings.map((booking) => booking.id));
+    const registeredTrip = { ...trip, bookingIds: trip.bookingIds.filter((id) => acceptedIds.has(id)) };
+    state.bookings = mergeBookings(state.bookings, uniqueBookings);
+    state.trips.push(registeredTrip);
+    draft.status = "approved";
+    draft.registeredTripId = trip.id;
+    draft.updatedAt = new Date().toISOString();
+    const session = state.importSessions.find((item) => item.id === draft.importSessionId);
+    if (session && !state.tripDrafts.some((item) => item.importSessionId === session.id && item.id !== draft.id && item.status === "pending")) {
+      session.status = "completed";
+      session.updatedAt = new Date().toISOString();
+    }
+    persist();
+    render();
+    state.selectedTripKey = trip.id;
+    renderTripDetail();
+    showView("detail");
+    showToast("出張を登録しました");
+  } catch (error) {
+    showToast(String(error?.message || error));
+  }
 }
 
 function screenshotCard(item) {
@@ -431,9 +538,9 @@ function dashboardCard(trip) {
   const latestBookingUpdate = Math.max(...trip.items.map((item) => Date.parse(item.updatedAt || 0)).filter(Number.isFinite), 0);
   const updatedAt = state.settings.lastAnalyzedAt || (latestBookingUpdate ? new Date(latestBookingUpdate).toISOString() : "");
   const updated = updatedAt ? relativeUpdatedAt(updatedAt) : "未更新";
-  return `<article class="dashboard-card trip-launch" data-trip-key="${escapeAttribute(tripKey(trip))}" tabindex="0" role="button" aria-label="${escapeAttribute(inferTripTitle(trip.items))}の詳細を開く">
+  return `<article class="dashboard-card trip-launch" data-trip-key="${escapeAttribute(tripKey(trip))}" tabindex="0" role="button" aria-label="${escapeAttribute(trip.title)}の詳細を開く">
     <header class="dashboard-head">
-      <div><span>次の移動</span><strong>${dateTimeSafe(nextAt)}</strong></div>
+      <div><span>${escapeHtml(trip.title)}</span><strong>${dateTimeSafe(nextAt)}</strong></div>
       <b>${countdown}</b>
     </header>
     ${outbound ? primaryFlight(outbound) : hotel ? primaryHotel(hotel) : ""}
@@ -488,18 +595,19 @@ function displayTrips() {
   const grouped = state.trips.map((trip) => {
     const items = (trip.bookingIds || []).map((id) => byId.get(id)).filter(Boolean);
     items.forEach((item) => groupedIds.add(item.id));
-    return items.length ? buildDisplayTrip(items, trip.title, trip.id) : null;
+    return items.length ? buildDisplayTrip(items, trip.title, trip.id, trip.notes || "") : null;
   }).filter(Boolean);
   const singles = active.filter((booking) => !groupedIds.has(booking.id)).map((booking) => buildDisplayTrip([booking], "", ""));
   return [...grouped, ...singles].sort((a, b) => Date.parse(a.startAt) - Date.parse(b.startAt));
 }
 
-function buildDisplayTrip(items, title = "", id = "") {
+function buildDisplayTrip(items, title = "", id = "", notes = "") {
   const startAt = new Date(Math.min(...items.map(bookingStartMs))).toISOString();
   const endAt = new Date(Math.max(...items.map(bookingEndMs))).toISOString();
   return {
     id,
-    title: inferTripTitle(items),
+    title: title || inferTripTitle(items),
+    notes,
     startAt,
     endAt,
     durationDays: Math.max(1, Math.ceil((bookingEndMs({ data: { checkIn: startAt, checkOut: endAt } }) - Date.parse(startAt)) / 86400000)),
@@ -628,7 +736,7 @@ function tripMini(trip) {
   const flights = trip.items.filter((item) => item.type === "flight").length;
   const hotels = trip.items.filter((item) => item.type === "hotel").length;
   return `<article class="trip-mini trip-launch" data-trip-key="${escapeAttribute(tripKey(trip))}" tabindex="0" role="button">
-    <div><time>${dateOnlySafe(trip.startAt)}</time><h3>${escapeHtml(inferTripTitle(trip.items))}</h3></div>
+    <div><time>${dateOnlySafe(trip.startAt)}</time><h3>${escapeHtml(trip.title)}</h3></div>
     <p>${[flights ? `フライト${flights}件` : "", hotels ? `ホテル${hotels}件` : ""].filter(Boolean).join("・")}</p>
   </article>`;
 }
@@ -662,7 +770,7 @@ function historyCard(trip) {
   return `<article class="history-card trip-launch" data-trip-key="${escapeAttribute(tripKey(trip))}" tabindex="0" role="button">
     <div class="history-date"><strong>${new Date(trip.startAt).getDate()}</strong><span>${new Intl.DateTimeFormat("ja-JP", { weekday: "short" }).format(new Date(trip.startAt))}</span></div>
     <div class="history-copy">
-      <div><strong>${escapeHtml(inferTripTitle(trip.items))}</strong><span class="history-status ${status === "進行中" ? "current" : ""}">${status}</span></div>
+      <div><strong>${escapeHtml(trip.title)}</strong><span class="history-status ${status === "進行中" ? "current" : ""}">${status}</span></div>
       <p>${formatDateRange(trip.startAt, trip.endAt)}</p>
       <small>${[flights.length ? `フライト ${flights.length}` : "", hotel?.data.name || ""].filter(Boolean).join(" ・ ")}</small>
     </div>
@@ -695,13 +803,14 @@ function renderTripDetail() {
   elements.tripDetail.innerHTML = `
     <header class="detail-hero">
       <span>${formatDateRange(trip.startAt, trip.endAt)}・${days}日間</span>
-      <h1>${escapeHtml(inferTripTitle(trip.items))}</h1>
+      <h1>${escapeHtml(trip.title)}</h1>
       <p>${trip.items.length}件の予約${warnings.length ? `・${warnings.length}件を要確認` : "・確認済み"}</p>
     </header>
     <section class="itinerary-section">
       <h2>旅程</h2>
       <div class="itinerary">${itineraryItems(trip).join("")}</div>
     </section>
+    ${trip.notes ? `<section class="trip-notes"><h2>メモ</h2><p>${escapeHtml(trip.notes)}</p></section>` : ""}
     ${warnings.length ? `<section class="detail-alert"><strong>確認が必要です</strong><ul>${warnings.map((warning) => `<li>${escapeHtml(warning)}</li>`).join("")}</ul></section>` : ""}
     <button class="secondary-button detail-manage-button" data-view="manage" type="button">予約内容を編集</button>`;
   elements.tripDetail.querySelector("[data-view='manage']")?.addEventListener("click", () => showView("manage"));
@@ -798,10 +907,18 @@ async function handleReviewAction(event) {
     if (!requireUser()) return;
     const approved = { ...analysis, status: "approved", userReviewedAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
     upsertAnalysis(approved);
-    reflectApprovedAnalyses([approved]);
+    const { session, drafts } = createImportSession({
+      images: [{ imageId: approved.imageId, imageHash: approved.imageHash }],
+      analyses: [approved],
+      homeAirport: state.settings.homeAirport,
+      now: new Date().toISOString(),
+    });
+    state.importSessions = [session, ...state.importSessions.filter((item) => item.id !== session.id)];
+    state.tripDrafts = [...drafts, ...state.tripDrafts.filter((draft) => draft.importSessionId !== session.id)];
     persist();
     render();
-    showToast("AI解析結果を予約へ反映しました。予約一覧から手修正できます。");
+    showView("sync");
+    showToast("出張候補を作成しました。登録前に内容を確認してください。");
   }
 }
 
@@ -1063,11 +1180,15 @@ async function clearImportedData() {
       bookings: [],
       aiAnalyses: [],
       trips: [],
+      importSessions: [],
+      tripDrafts: [],
       settings: { ...state.settings, lastAnalyzedAt: "" },
     });
     state.bookings = [];
     state.aiAnalyses = [];
     state.trips = [];
+    state.importSessions = [];
+    state.tripDrafts = [];
     state.settings = { ...state.settings, lastAnalyzedAt: "" };
     clearMigratedTripBoardData();
     clearScreenshotSelection();
@@ -1086,6 +1207,8 @@ function persist() {
     bookings: structuredCloneSafe(state.bookings),
     aiAnalyses: structuredCloneSafe(state.aiAnalyses),
     trips: structuredCloneSafe(state.trips),
+    importSessions: structuredCloneSafe(state.importSessions),
+    tripDrafts: structuredCloneSafe(state.tripDrafts),
     settings: structuredCloneSafe(state.settings),
   };
   saveQueue = saveQueue
@@ -1107,7 +1230,7 @@ function listen(element, eventName, handler) {
   element?.addEventListener(eventName, handler);
 }
 function requireUser() {
-  if (state.user) return true;
+  if (state.user || demoMode) return true;
   showToast("先にGoogleでログインしてください");
   showView("settings");
   return false;

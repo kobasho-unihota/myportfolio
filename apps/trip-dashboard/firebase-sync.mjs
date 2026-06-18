@@ -14,7 +14,7 @@ import {
   persistentMultipleTabManager,
   setDoc,
 } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-firestore.js";
-import { cleanCloudState, emptyCloudState } from "./firebase-state.mjs?v=20";
+import { cleanCloudState, emptyCloudState } from "./firebase-state.mjs?v=32";
 
 const firebaseConfig = {
   apiKey: "AIzaSyDdRlINBq1fdFbfKKkl5dQQM6rlWAKM9vo",
@@ -54,7 +54,7 @@ export const cloudSync = {
     ensureUser();
     const clean = cleanCloudState(nextState);
     await setDoc(stateRef(), {
-      version: 3,
+      version: 4,
       ...clean,
       updatedAt: new Date().toISOString(),
     });
