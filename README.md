@@ -20,13 +20,11 @@
 
 ### 健康・ライフログ
 
-- `BodyBank`: 体内エネルギー収支
 - `IUITracker`: 治療サイクル管理
 
 ### 生活支援
 
-- `fukan-weather`: 複数地点の天気表示
-- `poke-sapo`: ゲーム編成支援
+- `trip-dashboard`: 出張予約管理
 
 ## 開発方針
 
